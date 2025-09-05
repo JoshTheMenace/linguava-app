@@ -532,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
               context.go(AppRoutes.stats);
               break;
             case 4:
-              context.go(AppRoutes.settings);
+              context.go(AppRoutes.profile);
               break;
           }
         },

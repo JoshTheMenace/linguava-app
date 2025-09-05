@@ -9,6 +9,7 @@ import '../../widgets/common/flip_card.dart';
 import '../../widgets/common/study_grade_buttons.dart';
 import '../../models/study_card.dart';
 import '../../models/flashcard.dart';
+import '../../services/fsrs_service.dart';
 
 class StudyScreen extends StatefulWidget {
   final String deckId;
@@ -24,50 +25,50 @@ class _StudyScreenState extends State<StudyScreen> {
   bool _showGradeButtons = false;
   int _currentCardIndex = 0;
   
-  // Mock data for demonstration
-  final List<StudyCard> _studyCards = [
-    StudyCard(
-      flashcard: Flashcard(
-        id: '1',
-        front: 'Hola',
-        back: 'Hello (Spanish greeting)',
-        tags: ['Spanish', 'Greetings', 'Basic'],
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        updatedAt: DateTime.now(),
-      ),
-      isNew: true,
-      difficulty: 5.0,
-      stability: 1.0,
-    ),
-    StudyCard(
-      flashcard: Flashcard(
-        id: '2',
-        front: 'Comment allez-vous?',
-        back: 'How are you? (Formal French)',
-        tags: ['French', 'Greetings', 'Formal'],
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        updatedAt: DateTime.now(),
-      ),
-      isLearning: true,
-      reviewCount: 2,
-      difficulty: 6.2,
-      stability: 2.5,
-    ),
-    StudyCard(
-      flashcard: Flashcard(
-        id: '3',
-        front: 'Guten Tag',
-        back: 'Good day / Hello (German)',
-        tags: ['German', 'Greetings'],
-        createdAt: DateTime.now().subtract(const Duration(days: 7)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      reviewCount: 5,
-      difficulty: 4.8,
-      stability: 8.2,
-      daysUntilReview: 0,
-    ),
-  ];
+  // FSRS service for algorithm integration
+  late final FSRSService _fsrsService;
+  List<StudyCard> _studyCards = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fsrsService = FSRSService();
+    _initializeStudySession();
+  }
+
+  Future<void> _initializeStudySession() async {
+    try {
+      // Get due cards first, then new cards if we need more
+      final dueCards = await _fsrsService.getDueCards(deckId: widget.deckId, limit: 10);
+      final newCards = await _fsrsService.getNewCards(deckId: widget.deckId, limit: 5);
+      final learningCards = await _fsrsService.getLearningCards(deckId: widget.deckId);
+      
+      // Combine and prioritize: learning > due > new
+      final allCards = <StudyCard>[];
+      allCards.addAll(learningCards);
+      allCards.addAll(dueCards);
+      allCards.addAll(newCards);
+      
+      // Remove duplicates (shouldn't happen but just in case)
+      final uniqueCards = <String, StudyCard>{};
+      for (final card in allCards) {
+        uniqueCards[card.flashcard.id] = card;
+      }
+      
+      _studyCards = uniqueCards.values.toList();
+      
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading study session: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+  
 
   StudyCard get _currentCard => _studyCards[_currentCardIndex];
   
@@ -90,17 +91,57 @@ class _StudyScreenState extends State<StudyScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildProgressSection(),
-              Expanded(
-                child: _buildCardSection(),
+          child: _isLoading 
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              )
+            : _studyCards.isEmpty
+            ? _buildEmptyState()
+            : Column(
+                children: [
+                  _buildAppBar(),
+                  _buildProgressSection(),
+                  Expanded(
+                    child: _buildCardSection(),
+                  ),
+                  _buildBottomSection(),
+                ],
               ),
-              _buildBottomSection(),
-            ],
-          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.school_outlined,
+            size: 80,
+            color: AppColors.hint,
+          ),
+          const Gap(24),
+          Text(
+            'No cards to study',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const Gap(8),
+          Text(
+            'All cards are up to date!',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.hint,
+            ),
+          ),
+          const Gap(32),
+          ElevatedButton(
+            onPressed: () => context.go(AppRoutes.home),
+            child: const Text('Back to Home'),
+          ),
+        ],
       ),
     );
   }
@@ -310,18 +351,29 @@ class _StudyScreenState extends State<StudyScreen> {
     });
   }
 
-  void _handleGradeSelection(StudyGrade grade) {
-    // Simulate FSRS algorithm response
-    _processCardGrade(grade);
+  void _handleGradeSelection(StudyGrade grade) async {
+    await _processCardGrade(grade);
     _nextCard();
   }
 
-  void _processCardGrade(StudyGrade grade) {
-    // Here you would implement FSRS algorithm
-    // For now, just simulate the process
-    print('Card graded: $grade');
-    print('Current card difficulty: ${_currentCard.difficulty}');
-    print('Current card stability: ${_currentCard.stability}');
+  Future<void> _processCardGrade(StudyGrade grade) async {
+    try {
+      // Use FSRS algorithm to process the grade
+      final currentCard = _currentCard;
+      final updatedCard = await _fsrsService.reviewCard(currentCard, grade);
+      
+      // Update the card in our list
+      _studyCards[_currentCardIndex] = updatedCard;
+      
+      // Debug info
+      print('Card graded: $grade');
+      print('FSRS State: ${updatedCard.fsrsState}');
+      print('Difficulty: ${updatedCard.difficulty.toStringAsFixed(2)}');
+      print('Stability: ${updatedCard.formattedStability}');
+      print('Next review: ${updatedCard.nextReviewText}');
+    } catch (e) {
+      print('Error processing grade: $e');
+    }
   }
 
   void _nextCard() {
@@ -337,30 +389,8 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Map<StudyGrade, String> _getNextReviewTimes() {
-    // Simulate FSRS intervals based on current card state
-    if (_currentCard.isNew) {
-      return {
-        StudyGrade.again: '<1m',
-        StudyGrade.hard: '6m',
-        StudyGrade.good: '10m',
-        StudyGrade.easy: '4d',
-      };
-    } else if (_currentCard.isLearning) {
-      return {
-        StudyGrade.again: '<1m',
-        StudyGrade.hard: '6m',
-        StudyGrade.good: '1d',
-        StudyGrade.easy: '3d',
-      };
-    } else {
-      final stability = _currentCard.stability;
-      return {
-        StudyGrade.again: '<1m',
-        StudyGrade.hard: '${(stability * 0.5).round()}d',
-        StudyGrade.good: '${(stability * 1.2).round()}d',
-        StudyGrade.easy: '${(stability * 2.5).round()}d',
-      };
-    }
+    // Use real FSRS algorithm to get next review times
+    return _fsrsService.getNextReviewTimes(_currentCard);
   }
 
   Color _getStatusColor(String status) {
@@ -410,9 +440,12 @@ class _StudyScreenState extends State<StudyScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildInfoRow('Status', _currentCard.cardStatus),
+            _buildInfoRow('FSRS State', _currentCard.fsrsState),
             _buildInfoRow('Reviews', '${_currentCard.reviewCount}'),
-            _buildInfoRow('Difficulty', '${_currentCard.difficulty.toStringAsFixed(1)}'),
-            _buildInfoRow('Stability', '${_currentCard.stability.toStringAsFixed(1)} days'),
+            _buildInfoRow('Difficulty', '${_currentCard.difficulty.toStringAsFixed(2)}'),
+            _buildInfoRow('Stability', _currentCard.formattedStability),
+            _buildInfoRow('Interval', _currentCard.interval != null ? '${_currentCard.interval} days' : 'N/A'),
+            _buildInfoRow('Lapses', '${_currentCard.lapses ?? 0}'),
             _buildInfoRow('Next Review', _currentCard.nextReviewText),
           ],
         ),

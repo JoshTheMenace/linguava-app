@@ -7,6 +7,9 @@ import '../../core/constants/app_routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
+import '../../services/fsrs_service.dart';
+import '../../models/study_card.dart';
+import '../../models/flashcard.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -19,6 +22,71 @@ class _StatsScreenState extends State<StatsScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   String _selectedPeriod = 'week';
+  
+  // FSRS service and data
+  late final FSRSService _fsrsService;
+  List<StudyCard> _allStudyCards = [];
+  Map<String, dynamic> _stats = {};
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _fsrsService = FSRSService();
+    _loadStatsData();
+  }
+  
+  void _loadStatsData() async {
+    try {
+      // For now, using a default deck ID - in a real app, you'd aggregate across all decks
+      // or allow the user to select specific decks
+      const defaultDeckId = 'default-deck';
+      
+      // Load review statistics from database
+      final endDate = DateTime.now();
+      final startDate = endDate.subtract(const Duration(days: 30));
+      
+      final reviewStats = await _fsrsService.getReviewStatistics(
+        startDate: startDate,
+        endDate: endDate,
+      );
+      
+      final deckStats = await _fsrsService.getStudyStatistics(defaultDeckId);
+      
+      // Combine stats
+      _stats = {
+        ...reviewStats,
+        ...deckStats,
+      };
+      
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading stats: $e');
+      // Fallback to empty stats
+      _stats = {
+        'totalCards': 0,
+        'newCards': 0,
+        'learningCards': 0,
+        'dueCards': 0,
+        'reviewedCards': 0,
+        'masteredCards': 0,
+        'retention': 0.0,
+        'totalReviews': 0,
+        'correctAnswers': 0,
+        'accuracy': 0.0,
+        'averageReviewTime': 0.0,
+        'difficultyChange': 0.0,
+        'stabilityChange': 0.0,
+      };
+      
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   // Mock data for charts
   final Map<String, List<FlSpot>> _studyData = {
@@ -45,11 +113,6 @@ class _StatsScreenState extends State<StatsScreen>
     ],
   };
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
 
   @override
   void dispose() {
@@ -219,6 +282,10 @@ class _StatsScreenState extends State<StatsScreen>
       child: Column(
         children: [
           _buildStatsOverview(),
+          const Gap(16),
+          _buildFSRSStatsRow(),
+          const Gap(20),
+          _buildFSRSInsightsCard(),
           const Gap(20),
           _buildStudyChart(),
           const Gap(20),
@@ -231,25 +298,157 @@ class _StatsScreenState extends State<StatsScreen>
   }
 
   Widget _buildStatsOverview() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+        ),
+      );
+    }
+    
     return Row(
       children: [
         Expanded(
           child: _buildStatCard(
-            'Cards Studied',
-            '247',
+            'Total Cards',
+            '${_stats['totalCards'] ?? 0}',
             Icons.style,
             AppColors.primary,
-            '+12% this week',
+            '${_stats['reviewedCards'] ?? 0} reviewed',
           ),
         ),
         const Gap(12),
         Expanded(
           child: _buildStatCard(
-            'Time Studied',
-            '8.5h',
+            'Retention',
+            '${((_stats['retention'] ?? 0.0) * 100).toStringAsFixed(1)}%',
+            Icons.trending_up,
+            AppColors.secondary,
+            'Learning efficiency',
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildFSRSStatsRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStatCard(
+            'New Cards',
+            '${_stats['newCards'] ?? 0}',
+            Icons.fiber_new,
+            AppColors.warning,
+            'Ready to learn',
+          ),
+        ),
+        const Gap(12),
+        Expanded(
+          child: _buildStatCard(
+            'Due Cards',
+            '${_stats['dueCards'] ?? 0}',
+            Icons.schedule_send,
+            AppColors.error,
+            'Need review',
+          ),
+        ),
+        const Gap(12),
+        Expanded(
+          child: _buildStatCard(
+            'Mastered',
+            '${_stats['masteredCards'] ?? 0}',
+            Icons.emoji_events,
+            AppColors.success,
+            'Well learned',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFSRSInsightsCard() {
+    if (_isLoading) {
+      return const SizedBox.shrink();
+    }
+    
+    return AnimatedCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.psychology, color: AppColors.primary, size: 20),
+              ),
+              const Gap(12),
+              Text(
+                'FSRS Insights',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Gap(16),
+          
+          _buildInsightRow(
+            'Average Difficulty',
+            '${(_stats['averageDifficulty'] ?? 0.0).toStringAsFixed(2)}/10',
+            Icons.show_chart,
+            AppColors.warning,
+          ),
+          
+          const Gap(12),
+          
+          _buildInsightRow(
+            'Average Interval',
+            '${(_stats['averageInterval'] ?? 0.0).toStringAsFixed(1)} days',
             Icons.schedule,
             AppColors.secondary,
-            '+5% this week',
+          ),
+          
+          const Gap(12),
+          
+          _buildInsightRow(
+            'Learning Cards',
+            '${_stats['learningCards'] ?? 0}',
+            Icons.school,
+            AppColors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInsightRow(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const Gap(12),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],

@@ -157,6 +157,7 @@ class StudyCardContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (imageUrl != null) ...[
           Container(
@@ -175,13 +176,17 @@ class StudyCardContent extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
         ],
         
-        Text(
-          text,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: isAnswer ? AppColors.secondary : AppColors.primary,
+        Flexible(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: isAnswer ? AppColors.secondary : AppColors.primary,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
           ),
-          textAlign: TextAlign.center,
         ),
         
         if (tags.isNotEmpty) ...[

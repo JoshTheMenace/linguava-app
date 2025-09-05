@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
 import '../../models/deck.dart';
+import '../../services/database_service.dart';
 
 class EditDeckScreen extends StatefulWidget {
   final String deckId;
@@ -22,6 +23,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
+  final DatabaseService _databaseService = DatabaseService.instance;
   
   // Form controllers
   final _nameController = TextEditingController();
@@ -32,10 +34,11 @@ class _EditDeckScreenState extends State<EditDeckScreen>
   String _language = 'Spanish';
   String _difficulty = 'Beginner';
   bool _isPublic = false;
-  String? _imageUrl;
+  bool _isLoading = true;
+  bool _isSaving = false;
   
-  // Mock current deck data
-  late Deck _currentDeck;
+  // Current deck data
+  Deck? _currentDeck;
 
   @override
   void initState() {
@@ -44,31 +47,46 @@ class _EditDeckScreenState extends State<EditDeckScreen>
     _loadDeckData();
   }
 
-  void _loadDeckData() {
-    // Mock deck data - in real app, this would be loaded from database
-    _currentDeck = Deck(
-      id: widget.deckId,
-      name: 'Spanish Basics',
-      description: 'Essential Spanish vocabulary for beginners including greetings, numbers, and common phrases',
-      totalCards: 150,
-      reviewedCards: 89,
-      masteredCards: 45,
-      language: 'Spanish',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['Spanish', 'Vocabulary', 'Beginner'],
-      isPublic: false,
-    );
-    
-    // Populate form fields
-    _nameController.text = _currentDeck.name;
-    _descriptionController.text = _currentDeck.description;
-    _tags = List.from(_currentDeck.tags);
-    _language = _currentDeck.language;
-    _difficulty = _currentDeck.difficulty;
-    _isPublic = _currentDeck.isPublic;
+  Future<void> _loadDeckData() async {
+    try {
+      final deck = await _databaseService.database.deckDao.getDeckById(widget.deckId);
+      
+      if (deck != null) {
+        _currentDeck = Deck(
+          id: deck.id,
+          name: deck.name,
+          description: deck.description,
+          language: deck.language,
+          difficulty: deck.difficulty,
+          creatorId: deck.creatorId,
+          isPublic: deck.isPublic,
+          createdAt: deck.createdAt,
+          updatedAt: deck.updatedAt,
+        );
+        
+        // Populate form fields
+        _nameController.text = _currentDeck!.name;
+        _descriptionController.text = _currentDeck!.description;
+        _language = _currentDeck!.language;
+        _difficulty = _currentDeck!.difficulty;
+        _isPublic = _currentDeck!.isPublic;
+        
+        // Note: Tags are not yet implemented in the database schema
+        // For now, use empty tags list
+        _tags = [];
+      }
+      
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Error loading deck: ${e.toString()}');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -94,17 +112,60 @@ class _EditDeckScreenState extends State<EditDeckScreen>
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildTabBar(),
-              Expanded(
-                child: _buildTabContent(),
-              ),
-              _buildBottomActions(),
-            ],
-          ),
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                )
+              : _currentDeck == null
+                  ? _buildErrorState()
+                  : Column(
+                      children: [
+                        _buildAppBar(),
+                        _buildTabBar(),
+                        Expanded(
+                          child: _buildTabContent(),
+                        ),
+                        _buildBottomActions(),
+                      ],
+                    ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: AppColors.error,
+          ),
+          const Gap(16),
+          Text(
+            'Deck Not Found',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: AppColors.error,
+            ),
+          ),
+          const Gap(8),
+          Text(
+            'The deck you are trying to edit was not found.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.hint,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const Gap(24),
+          GradientButton(
+            text: 'Back to Decks',
+            onPressed: () => context.go(AppRoutes.deckManagement),
+          ),
+        ],
       ),
     );
   }
@@ -133,7 +194,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                   ),
                 ),
                 Text(
-                  '${_currentDeck.totalCards} cards',
+                  _currentDeck?.name ?? 'Loading...',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.hint,
                   ),
@@ -539,41 +600,18 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                   children: [
                     Expanded(
                       child: _buildStatItem(
-                        'Total Cards',
-                        '${_currentDeck.totalCards}',
-                        Icons.style,
+                        'Created',
+                        '${_formatDate(_currentDeck!.createdAt)}',
+                        Icons.calendar_today,
                         AppColors.primary,
                       ),
                     ),
                     Expanded(
                       child: _buildStatItem(
-                        'Reviewed',
-                        '${_currentDeck.reviewedCards}',
-                        Icons.check_circle,
+                        'Updated',
+                        '${_formatDate(_currentDeck!.updatedAt)}',
+                        Icons.update,
                         AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const Gap(16),
-                
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        'Mastered',
-                        '${_currentDeck.masteredCards}',
-                        Icons.star,
-                        AppColors.warning,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildStatItem(
-                        'Accuracy',
-                        '${(_currentDeck.masteredCards / _currentDeck.reviewedCards * 100).round()}%',
-                        Icons.trending_up,
-                        AppColors.secondary,
                       ),
                     ),
                   ],
@@ -596,18 +634,31 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                 ),
                 const Gap(16),
                 
-                _buildProgressBar(
-                  'Overall Progress',
-                  _currentDeck.progressPercentage,
-                  AppColors.primary,
-                ),
-                
-                const Gap(12),
-                
-                _buildProgressBar(
-                  'Mastery Rate',
-                  _currentDeck.masteryPercentage,
-                  AppColors.success,
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.insights, color: AppColors.primary),
+                      const Gap(8),
+                      Text(
+                        'Statistics coming soon',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Text(
+                        'Card progress and statistics will be available once you add flashcards.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.hint,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -627,11 +678,11 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                 ),
                 const Gap(16),
                 
-                _buildInfoRow('Created', _formatDate(_currentDeck.createdAt)),
-                _buildInfoRow('Last Updated', _formatDate(_currentDeck.updatedAt)),
-                _buildInfoRow('Language', _currentDeck.language),
-                _buildInfoRow('Difficulty', _currentDeck.difficulty),
-                _buildInfoRow('Public', _currentDeck.isPublic ? 'Yes' : 'No'),
+                _buildInfoRow('Created', _formatDate(_currentDeck!.createdAt)),
+                _buildInfoRow('Last Updated', _formatDate(_currentDeck!.updatedAt)),
+                _buildInfoRow('Language', _currentDeck!.language),
+                _buildInfoRow('Difficulty', _currentDeck!.difficulty),
+                _buildInfoRow('Public', _currentDeck!.isPublic ? 'Yes' : 'No'),
               ],
             ),
           ),
@@ -741,7 +792,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () => context.go(AppRoutes.home),
+                onPressed: _isSaving ? null : () => _showExitDialog(),
                 child: const Text('Cancel'),
               ),
             ),
@@ -749,9 +800,18 @@ class _EditDeckScreenState extends State<EditDeckScreen>
             Expanded(
               flex: 2,
               child: GradientButton(
-                text: 'Save Changes',
-                icon: const Icon(Icons.save, color: Colors.white, size: 20),
-                onPressed: _saveDeck,
+                text: _isSaving ? 'Saving...' : 'Save Changes',
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.save, color: Colors.white, size: 20),
+                onPressed: _isSaving ? null : _saveDeck,
               ),
             ),
           ],
@@ -865,7 +925,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Deck'),
-        content: Text('Are you sure you want to delete "${_currentDeck.name}"? This action cannot be undone.'),
+        content: Text('Are you sure you want to delete "${_currentDeck!.name}"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -887,21 +947,55 @@ class _EditDeckScreenState extends State<EditDeckScreen>
     );
   }
 
-  void _saveDeck() {
-    if (_formKey.currentState!.validate()) {
-      // Mock save operation
-      _showSnackBar('Deck updated successfully!');
-      context.go(AppRoutes.home);
+  Future<void> _saveDeck() async {
+    if (_formKey.currentState!.validate() && _currentDeck != null) {
+      setState(() {
+        _isSaving = true;
+      });
+
+      try {
+        final updatedDeck = Deck(
+          id: _currentDeck!.id,
+          name: _nameController.text.trim(),
+          description: _descriptionController.text.trim(),
+          language: _language,
+          difficulty: _difficulty,
+          creatorId: _currentDeck!.creatorId,
+          isPublic: _isPublic,
+          createdAt: _currentDeck!.createdAt,
+          updatedAt: DateTime.now(),
+        );
+
+        await _databaseService.database.deckDao.upsertDeck(updatedDeck);
+
+        if (mounted) {
+          _showSnackBar('Deck updated successfully!');
+          context.go(AppRoutes.deckManagement);
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackBar('Error updating deck: ${e.toString()}');
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
+      }
     }
   }
 
   void _showExitDialog() {
     // Check if there are unsaved changes
-    bool hasChanges = _nameController.text != _currentDeck.name ||
-                     _descriptionController.text != _currentDeck.description ||
-                     _language != _currentDeck.language ||
-                     _difficulty != _currentDeck.difficulty ||
-                     _isPublic != _currentDeck.isPublic;
+    bool hasChanges = false;
+    if (_currentDeck != null) {
+      hasChanges = _nameController.text != _currentDeck!.name ||
+                   _descriptionController.text != _currentDeck!.description ||
+                   _language != _currentDeck!.language ||
+                   _difficulty != _currentDeck!.difficulty ||
+                   _isPublic != _currentDeck!.isPublic;
+    }
     
     if (hasChanges) {
       showDialog(
@@ -917,7 +1011,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                context.go(AppRoutes.home);
+                context.go(AppRoutes.deckManagement);
               },
               child: const Text('Discard'),
             ),
@@ -925,7 +1019,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
         ),
       );
     } else {
-      context.go(AppRoutes.home);
+      context.go(AppRoutes.deckManagement);
     }
   }
 

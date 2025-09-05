@@ -7,6 +7,9 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
+import '../../models/flashcard.dart';
+import '../../services/database_service.dart';
+import '../../services/fsrs_service.dart';
 
 class AddCardScreen extends StatefulWidget {
   final String? deckId;
@@ -21,6 +24,8 @@ class _AddCardScreenState extends State<AddCardScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
+  final DatabaseService _databaseService = DatabaseService.instance;
+  final FSRSService _fsrsService = FSRSService();
   
   // Form controllers
   final _frontController = TextEditingController();
@@ -34,6 +39,7 @@ class _AddCardScreenState extends State<AddCardScreen>
   String _difficulty = 'medium';
   bool _enableTTS = false;
   bool _enableAI = true;
+  bool _isLoading = false;
   
   // AI suggestions
   bool _showAISuggestions = false;
@@ -750,9 +756,18 @@ class _AddCardScreenState extends State<AddCardScreen>
             Expanded(
               flex: 2,
               child: GradientButton(
-                text: 'Add Card',
-                icon: const Icon(Icons.add, color: Colors.white, size: 20),
-                onPressed: _saveCard,
+                text: _isLoading ? 'Adding...' : 'Add Card',
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.add, color: Colors.white, size: 20),
+                onPressed: _isLoading ? null : _saveCard,
               ),
             ),
           ],
@@ -870,11 +885,44 @@ class _AddCardScreenState extends State<AddCardScreen>
     }
   }
 
-  void _saveCard() {
-    if (_formKey.currentState!.validate()) {
-      // Mock save operation
-      _showSnackBar('Card added successfully!');
-      context.go(AppRoutes.home);
+  Future<void> _saveCard() async {
+    if (_formKey.currentState!.validate() && widget.deckId != null) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        // Create the flashcard
+        final flashcard = Flashcard(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          front: _frontController.text.trim(),
+          back: _backController.text.trim(),
+          tags: _tags,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        // Save flashcard to database
+        await _databaseService.database.flashcardDao.insertFlashcard(flashcard, widget.deckId!);
+
+        // Initialize FSRS study card
+        await _fsrsService.initializeCard(flashcard);
+
+        if (mounted) {
+          _showSnackBar('Card added successfully!');
+          context.go('${AppRoutes.editDeck}?deckId=${widget.deckId}');
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackBar('Error adding card: ${e.toString()}');
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 

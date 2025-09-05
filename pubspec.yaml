@@ -53,6 +53,15 @@ dependencies:
   # Utilities
   gap: ^3.0.1
   intl: ^0.19.0
+  
+  # Spaced Repetition Algorithm
+  fsrs: ^2.0.1
+  
+  # Local Database
+  drift: ^2.16.0
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.2
+  path: ^1.8.0
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +77,7 @@ dev_dependencies:
   # Code generation
   build_runner: ^2.4.12
   riverpod_generator: ^2.4.3
+  drift_dev: ^2.16.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
 import '../../models/deck.dart';
+import '../../services/database_service.dart';
 
 class DeckManagementScreen extends StatefulWidget {
   const DeckManagementScreen({super.key});
@@ -20,96 +21,24 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
+  final DatabaseService _databaseService = DatabaseService.instance;
+  
   String _searchQuery = '';
   String _sortBy = 'recent';
   bool _showOnlyDue = false;
+  bool _isLoading = true;
 
-  final List<Deck> _mockDecks = [
-    Deck(
-      id: '1',
-      name: 'Spanish Basics',
-      description: 'Essential Spanish vocabulary for beginners including greetings, numbers, and common phrases',
-      totalCards: 150,
-      reviewedCards: 89,
-      masteredCards: 45,
-      language: 'Spanish',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['Spanish', 'Vocabulary', 'Beginner'],
-      isPublic: false,
-    ),
-    Deck(
-      id: '2',
-      name: 'French Grammar Mastery',
-      description: 'Master French grammar rules, conjugations, and sentence structure',
-      totalCards: 200,
-      reviewedCards: 156,
-      masteredCards: 98,
-      language: 'French',
-      difficulty: 'Intermediate',
-      createdAt: DateTime.now().subtract(const Duration(days: 14)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      creatorId: 'user1',
-      tags: ['French', 'Grammar', 'Intermediate'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '3',
-      name: 'Business English Professional',
-      description: 'Professional English vocabulary, phrases, and business terminology',
-      totalCards: 120,
-      reviewedCards: 45,
-      masteredCards: 12,
-      language: 'English',
-      difficulty: 'Advanced',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['English', 'Business', 'Advanced'],
-      isPublic: false,
-    ),
-    Deck(
-      id: '4',
-      name: 'Japanese Kanji Level 1',
-      description: 'Essential Japanese Kanji characters with readings and meanings',
-      totalCards: 300,
-      reviewedCards: 180,
-      masteredCards: 60,
-      language: 'Japanese',
-      difficulty: 'Intermediate',
-      createdAt: DateTime.now().subtract(const Duration(days: 21)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-      creatorId: 'user1',
-      tags: ['Japanese', 'Kanji', 'Characters'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '5',
-      name: 'German Pronunciation',
-      description: 'German pronunciation guide with audio examples and phonetic rules',
-      totalCards: 80,
-      reviewedCards: 25,
-      masteredCards: 8,
-      language: 'German',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['German', 'Pronunciation', 'Audio'],
-      isPublic: false,
-    ),
-  ];
+  List<Deck> _allDecks = [];
 
   List<Deck> get _filteredDecks {
-    var decks = _mockDecks.where((deck) {
+    var decks = _allDecks.where((deck) {
       final matchesSearch = _searchQuery.isEmpty ||
           deck.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          deck.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          deck.tags.any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()));
+          deck.description.toLowerCase().contains(_searchQuery.toLowerCase());
 
-      final matchesFilter = !_showOnlyDue || (deck.reviewedCards < deck.totalCards);
+      // For now, we don't have due filtering since we don't have card statistics yet
+      // This would require joining with flashcards and study cards tables
+      final matchesFilter = !_showOnlyDue; // TODO: Implement actual due filtering
 
       return matchesSearch && matchesFilter;
     }).toList();
@@ -117,12 +46,6 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
     switch (_sortBy) {
       case 'name':
         decks.sort((a, b) => a.name.compareTo(b.name));
-        break;
-      case 'progress':
-        decks.sort((a, b) => b.progressPercentage.compareTo(a.progressPercentage));
-        break;
-      case 'cards':
-        decks.sort((a, b) => b.totalCards.compareTo(a.totalCards));
         break;
       case 'recent':
       default:
@@ -140,6 +63,33 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadDecks();
+  }
+
+  Future<void> _loadDecks() async {
+    try {
+      final decks = await _databaseService.database.deckDao.getAllDecks();
+      final modelDecks = decks.map((deck) => Deck(
+        id: deck.id,
+        name: deck.name,
+        description: deck.description,
+        language: deck.language,
+        difficulty: deck.difficulty,
+        creatorId: deck.creatorId,
+        isPublic: deck.isPublic,
+        createdAt: deck.createdAt,
+        updatedAt: deck.updatedAt,
+      )).toList();
+
+      setState(() {
+        _allDecks = modelDecks;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -164,16 +114,22 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildSearchAndFilters(),
-              _buildTabBar(),
-              Expanded(
-                child: _buildTabContent(),
-              ),
-            ],
-          ),
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                )
+              : Column(
+                  children: [
+                    _buildAppBar(),
+                    _buildSearchAndFilters(),
+                    _buildTabBar(),
+                    Expanded(
+                      child: _buildTabContent(),
+                    ),
+                  ],
+                ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -209,7 +165,7 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
                   ),
                 ),
                 Text(
-                  '${_mockDecks.length} decks • ${_mockDecks.fold(0, (sum, deck) => sum + deck.totalCards)} cards total',
+                  '${_allDecks.length} decks',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.hint,
                   ),
@@ -264,7 +220,8 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
             ],
           ),
           const Gap(12),
-          Row(
+          Wrap(
+            spacing: 8,
             children: [
               FilterChip(
                 label: const Text('Due for Review'),
@@ -277,7 +234,6 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
                 selectedColor: AppColors.warning.withOpacity(0.2),
                 checkmarkColor: AppColors.warning,
               ),
-              const Gap(8),
               FilterChip(
                 label: Text('Sort: ${_getSortLabel(_sortBy)}'),
                 onSelected: (_) => _showSortOptions(),
@@ -368,9 +324,6 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
   }
 
   Widget _buildDeckCard(Deck deck, int index, {required bool isMyDecks}) {
-    final dueCards = deck.totalCards - deck.reviewedCards;
-    final isDue = dueCards > 0;
-
     return AnimatedCard(
       animationDelay: Duration(milliseconds: 100 * index),
       onTap: () => _onDeckTap(deck),
@@ -402,8 +355,6 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
                     const PopupMenuItem(value: 'study', child: Text('Study Now')),
                     const PopupMenuItem(value: 'edit', child: Text('Edit Deck')),
                     const PopupMenuItem(value: 'stats', child: Text('View Stats')),
-                    const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-                    const PopupMenuItem(value: 'export', child: Text('Export')),
                     const PopupMenuItem(value: 'delete', child: Text('Delete')),
                   ],
                 ),
@@ -426,79 +377,59 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppColors.hint,
             ),
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
           
           const Spacer(),
           
-          // Progress section
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // Deck info
+          Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Progress',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.hint,
-                    ),
-                  ),
-                  Text(
-                    '${(deck.progressPercentage * 100).round()}%',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const Gap(4),
-              LinearProgressIndicator(
-                value: deck.progressPercentage,
-                backgroundColor: AppColors.divider,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                minHeight: 3,
-              ),
-              const Gap(8),
-              
-              // Stats row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildStatPill('${deck.totalCards}', 'Cards', AppColors.primary),
-                  if (isDue)
-                    _buildStatPill('$dueCards', 'Due', AppColors.warning)
-                  else
-                    _buildStatPill('${deck.masteredCards}', 'Mastered', AppColors.success),
-                ],
-              ),
-            ],
-          ),
-          
-          const Gap(8),
-          
-          // Tags
-          if (deck.tags.isNotEmpty)
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: deck.tags.take(2).map((tag) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: _getDifficultyColor(deck.difficulty).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  tag,
+                  deck.difficulty,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.primary,
-                    fontSize: 10,
+                    color: _getDifficultyColor(deck.difficulty),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
                   ),
                 ),
-              )).toList(),
-            ),
+              ),
+              const Spacer(),
+              if (deck.isPublic)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.public,
+                        size: 12,
+                        color: AppColors.secondary,
+                      ),
+                      const Gap(2),
+                      Text(
+                        'Public',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.secondary,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -624,7 +555,7 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
                         ),
                       ),
                       Text(
-                        '${deck.totalCards} cards • ${deck.difficulty}',
+                        '${deck.difficulty} • ${deck.language}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AppColors.hint,
                         ),
@@ -705,12 +636,6 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
       case 'stats':
         context.go(AppRoutes.stats);
         break;
-      case 'duplicate':
-        _showSnackBar('Deck duplicated successfully');
-        break;
-      case 'export':
-        _showSnackBar('Deck exported successfully');
-        break;
       case 'delete':
         _showDeleteConfirmation(deck);
         break;
@@ -775,16 +700,16 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Deck'),
-        content: Text('Are you sure you want to delete "${deck.name}"? This action cannot be undone.'),
+        content: Text('Are you sure you want to delete "${deck.name}"? This will also delete all flashcards in this deck. This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              _showSnackBar('Deck deleted successfully');
+              await _deleteDeck(deck);
             },
             child: Text(
               'Delete',
@@ -794,6 +719,19 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _deleteDeck(Deck deck) async {
+    try {
+      await _databaseService.database.deckDao.deleteDeck(deck.id);
+      
+      // Reload decks after deletion
+      await _loadDecks();
+      
+      _showSnackBar('Deck "${deck.name}" deleted successfully');
+    } catch (e) {
+      _showSnackBar('Error deleting deck: ${e.toString()}');
+    }
   }
 
   void _showSnackBar(String message) {
@@ -846,6 +784,19 @@ class _DeckManagementScreenState extends State<DeckManagementScreen>
         return Icons.numbers;
       default:
         return Icons.access_time;
+    }
+  }
+
+  Color _getDifficultyColor(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'beginner':
+        return AppColors.success;
+      case 'intermediate':
+        return AppColors.warning;
+      case 'advanced':
+        return AppColors.error;
+      default:
+        return AppColors.primary;
     }
   }
 }

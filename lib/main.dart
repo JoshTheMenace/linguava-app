@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/app_router.dart';
+import 'services/data_seeder.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   SystemChrome.setSystemUIOverlayStyle(
@@ -15,6 +16,9 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
+  
+  // Seed initial data
+  await DataSeeder.seedInitialData();
   
   runApp(
     const ProviderScope(
