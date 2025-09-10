@@ -39,11 +39,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   void _handleSignup() async {
     if (_formKey.currentState!.validate() && _acceptTerms) {
       try {
+        if (kDebugMode) {
+          print('=== SIGNUP ATTEMPT START ===');
+          print('Email: ${_emailController.text.trim()}');
+          print('About to call authProvider.signUp');
+        }
+        
         final response = await ref.read(authProvider.notifier).signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
           fullName: _nameController.text.trim(),
         );
+        
+        if (kDebugMode) {
+          print('=== SIGNUP CALL COMPLETED ===');
+          print('Response received: ${response != null}');
+        }
         
         if (mounted) {
           // Check the actual Supabase response to determine flow
@@ -136,6 +147,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           }
         }
       } catch (e) {
+        if (kDebugMode) {
+          print('=== SIGNUP EXCEPTION ===');
+          print('Exception type: ${e.runtimeType}');
+          print('Exception message: ${e.toString()}');
+          print('Stack trace: ${StackTrace.current}');
+        }
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

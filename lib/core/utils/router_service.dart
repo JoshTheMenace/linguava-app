@@ -36,14 +36,15 @@ class RouterService {
           print('Has completed onboarding: ${authState.hasCompletedOnboarding}');
         }
         
-        if (authState.isLoading) {
+        final isOnAuth = state.uri.toString() == AppRoutes.login || 
+                        state.uri.toString() == AppRoutes.signup;
+        
+        if (authState.isLoading && !isOnAuth) {
           return AppRoutes.splash;
         }
         
         final isOnSplash = state.uri.toString() == AppRoutes.splash;
         final isOnOnboarding = state.uri.toString() == AppRoutes.onboarding;
-        final isOnAuth = state.uri.toString() == AppRoutes.login || 
-                        state.uri.toString() == AppRoutes.signup;
         
         // Only check onboarding completion - don't require authentication for most pages
         if (!authState.hasCompletedOnboarding && !isOnOnboarding && !isOnSplash) {
