@@ -39,6 +39,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
   
   // Current deck data
   Deck? _currentDeck;
+  List<Map<String, dynamic>> _deckCards = [];
 
   @override
   void initState() {
@@ -74,6 +75,9 @@ class _EditDeckScreenState extends State<EditDeckScreen>
         // Note: Tags are not yet implemented in the database schema
         // For now, use empty tags list
         _tags = [];
+        
+        // Load cards for this deck
+        await _loadDeckCards();
       }
       
       setState(() {
@@ -86,6 +90,46 @@ class _EditDeckScreenState extends State<EditDeckScreen>
           _isLoading = false;
         });
       }
+    }
+  }
+  
+  Future<void> _loadDeckCards() async {
+    try {
+      final flashcards = await _databaseService.database.flashcardDao.getFlashcardsByDeck(widget.deckId);
+      
+      List<Map<String, dynamic>> cards = [];
+      for (final flashcard in flashcards) {
+        // Try to get study card data to determine difficulty
+        String difficulty = 'medium'; // default
+        try {
+          final studyCard = await _databaseService.database.studyCardDao.getStudyCard(flashcard.id);
+          if (studyCard != null) {
+            // Determine difficulty based on FSRS data
+            if (studyCard.difficulty < 3.0) {
+              difficulty = 'easy';
+            } else if (studyCard.difficulty > 6.0) {
+              difficulty = 'hard';
+            }
+          }
+        } catch (e) {
+          // No study data yet, use default
+        }
+        
+        cards.add({
+          'id': flashcard.id,
+          'front': flashcard.front,
+          'back': flashcard.back,
+          'difficulty': difficulty,
+        });
+      }
+      
+      if (mounted) {
+        setState(() {
+          _deckCards = cards;
+        });
+      }
+    } catch (e) {
+      print('Error loading deck cards: $e');
     }
   }
 
@@ -491,14 +535,6 @@ class _EditDeckScreenState extends State<EditDeckScreen>
   }
 
   Widget _buildCardsTab() {
-    // Mock cards data
-    final cards = [
-      {'front': 'Hola', 'back': 'Hello', 'difficulty': 'easy'},
-      {'front': 'Gracias', 'back': 'Thank you', 'difficulty': 'easy'},
-      {'front': 'Por favor', 'back': 'Please', 'difficulty': 'medium'},
-      {'front': 'Lo siento', 'back': 'I am sorry', 'difficulty': 'medium'},
-      {'front': 'No entiendo', 'back': 'I don\'t understand', 'difficulty': 'hard'},
-    ];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -508,7 +544,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
             children: [
               Expanded(
                 child: Text(
-                  '${cards.length} Cards',
+                  '${_deckCards.length} Cards',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -524,7 +560,10 @@ class _EditDeckScreenState extends State<EditDeckScreen>
           
           const Gap(16),
           
-          ...cards.asMap().entries.map((entry) {
+          if (_deckCards.isEmpty)
+            _buildNoCardsMessage()
+          else
+            ..._deckCards.asMap().entries.map((entry) {
             final index = entry.key;
             final card = entry.value;
             
@@ -537,7 +576,7 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                     width: 4,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: _getDifficultyColor(card['difficulty']!.toLowerCase()),
+                      color: _getDifficultyColor(card['difficulty'].toLowerCase()),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -547,13 +586,13 @@ class _EditDeckScreenState extends State<EditDeckScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          card['front']!,
+                          card['front'],
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          card['back']!,
+                          card['back'],
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.hint,
                           ),
@@ -1068,5 +1107,40 @@ class _EditDeckScreenState extends State<EditDeckScreen>
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+  
+  Widget _buildNoCardsMessage() {
+    return AnimatedCard(
+      child: Column(
+        children: [
+          Icon(
+            Icons.style_outlined,
+            size: 48,
+            color: AppColors.hint,
+          ),
+          const Gap(16),
+          Text(
+            'No Cards Yet',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Gap(8),
+          Text(
+            'Add cards to this deck to start studying',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.hint,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const Gap(16),
+          ElevatedButton.icon(
+            onPressed: () => context.go('${AppRoutes.addCard}?deckId=${widget.deckId}'),
+            icon: const Icon(Icons.add),
+            label: const Text('Add First Card'),
+          ),
+        ],
+      ),
+    );
   }
 }

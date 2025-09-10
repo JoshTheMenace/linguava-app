@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
 import '../../models/deck.dart';
+import '../../services/database_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -19,6 +20,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   final _searchController = TextEditingController();
+  final DatabaseService _databaseService = DatabaseService.instance;
   
   String _searchQuery = '';
   String _selectedLanguage = 'All';
@@ -28,85 +30,8 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
   String _sortBy = 'Popularity';
   
   bool _isSearching = false;
-  
-  // Mock data for demonstration
-  final List<Deck> _allDecks = [
-    Deck(
-      id: '1',
-      name: 'Spanish Basics',
-      description: 'Essential Spanish vocabulary for beginners',
-      totalCards: 150,
-      reviewedCards: 89,
-      masteredCards: 45,
-      language: 'Spanish',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['Spanish', 'Vocabulary', 'Beginner'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '2',
-      name: 'French Grammar',
-      description: 'Comprehensive French grammar rules and exercises',
-      totalCards: 200,
-      reviewedCards: 120,
-      masteredCards: 80,
-      language: 'French',
-      difficulty: 'Intermediate',
-      createdAt: DateTime.now().subtract(const Duration(days: 15)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-      creatorId: 'user2',
-      tags: ['French', 'Grammar', 'Intermediate'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '3',
-      name: 'Japanese Kanji',
-      description: 'Essential Japanese Kanji characters for N5 level',
-      totalCards: 300,
-      reviewedCards: 180,
-      masteredCards: 120,
-      language: 'Japanese',
-      difficulty: 'Advanced',
-      createdAt: DateTime.now().subtract(const Duration(days: 30)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 5)),
-      creatorId: 'user3',
-      tags: ['Japanese', 'Kanji', 'JLPT', 'N5'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '4',
-      name: 'German Vocabulary',
-      description: 'Common German words and phrases for daily conversations',
-      totalCards: 180,
-      reviewedCards: 90,
-      masteredCards: 60,
-      language: 'German',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 12)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 3)),
-      creatorId: 'user4',
-      tags: ['German', 'Vocabulary', 'Conversation'],
-      isPublic: true,
-    ),
-    Deck(
-      id: '5',
-      name: 'Medical Terminology',
-      description: 'Medical terms and definitions for healthcare professionals',
-      totalCards: 400,
-      reviewedCards: 200,
-      masteredCards: 150,
-      language: 'English',
-      difficulty: 'Advanced',
-      createdAt: DateTime.now().subtract(const Duration(days: 20)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      creatorId: 'user5',
-      tags: ['Medical', 'Terminology', 'Healthcare', 'Professional'],
-      isPublic: false,
-    ),
-  ];
+  List<Deck> _allDecks = [];
+  bool _isLoading = true;
   
   final List<String> _recentSearches = [
     'Spanish conversation',
@@ -129,6 +54,34 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _searchController.addListener(_onSearchChanged);
+    _loadDecks();
+  }
+
+  Future<void> _loadDecks() async {
+    try {
+      final decks = await _databaseService.database.deckDao.getAllDecks();
+      final modelDecks = decks.map((deck) => Deck(
+        id: deck.id,
+        name: deck.name,
+        description: deck.description,
+        language: deck.language,
+        difficulty: deck.difficulty,
+        creatorId: deck.creatorId,
+        isPublic: deck.isPublic,
+        createdAt: deck.createdAt,
+        updatedAt: deck.updatedAt,
+      )).toList();
+
+      setState(() {
+        _allDecks = modelDecks;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading decks: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -209,17 +162,30 @@ class _SearchScreenState extends State<SearchScreen> with TickerProviderStateMix
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildSearchBar(),
-              _buildFilters(),
-              _buildTabBar(),
-              Expanded(
-                child: _buildTabContent(),
+          child: _isLoading
+            ? Column(
+                children: [
+                  _buildAppBar(),
+                  const Expanded(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  _buildAppBar(),
+                  _buildSearchBar(),
+                  _buildFilters(),
+                  _buildTabBar(),
+                  Expanded(
+                    child: _buildTabContent(),
+                  ),
+                ],
               ),
-            ],
-          ),
         ),
       ),
     );
