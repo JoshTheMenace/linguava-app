@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gap/gap.dart';
 import '../../core/constants/app_routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -29,23 +30,99 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-      
-      await Future.delayed(const Duration(seconds: 1));
-      
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        context.go(AppRoutes.home);
+      try {
+        await ref.read(authProvider.notifier).signIn(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        
+        if (mounted) {
+          context.go(AppRoutes.home);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Login failed: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
 
   void _handleSkip() {
     context.go(AppRoutes.home);
+  }
+
+  void _handleGoogleSignIn() async {
+    try {
+      await ref.read(authProvider.notifier).signInWithGoogle();
+      if (mounted) {
+        context.go(AppRoutes.home);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google sign in failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleAppleSignIn() async {
+    try {
+      await ref.read(authProvider.notifier).signInWithApple();
+      if (mounted) {
+        context.go(AppRoutes.home);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Apple sign in failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleForgotPassword() async {
+    if (_emailController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await ref.read(authProvider.notifier).resetPassword(_emailController.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password reset email sent!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send reset email: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -226,8 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () {
-            },
+            onPressed: _handleForgotPassword,
             child: const Text('Forgot Password?'),
           ),
         )
@@ -238,11 +314,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLoginButton() {
+    final authState = ref.watch(authProvider);
+    
     return SizedBox(
       height: 56,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleLogin,
-        child: _isLoading
+        onPressed: authState.isLoading ? null : _handleLogin,
+        child: authState.isLoading
             ? const SizedBox(
                 height: 20,
                 width: 20,
@@ -282,13 +360,13 @@ class _LoginScreenState extends State<LoginScreen> {
         _buildSocialButton(
           icon: Icons.g_mobiledata,
           label: 'Continue with Google',
-          onPressed: _handleSkip,
+          onPressed: _handleGoogleSignIn,
         ),
         const Gap(12),
         _buildSocialButton(
           icon: Icons.apple,
           label: 'Continue with Apple',
-          onPressed: _handleSkip,
+          onPressed: _handleAppleSignIn,
         ),
       ],
     )
@@ -301,12 +379,20 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required VoidCallback onPressed,
   }) {
+    final authState = ref.watch(authProvider);
+    
     return SizedBox(
       height: 56,
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 24),
+        onPressed: authState.isLoading ? null : onPressed,
+        icon: authState.isLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(icon, size: 24),
         label: Text(label),
       ),
     );

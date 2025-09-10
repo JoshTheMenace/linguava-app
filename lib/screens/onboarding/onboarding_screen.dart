@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gap/gap.dart';
 import '../../core/constants/app_routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../providers/auth_provider.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
@@ -192,14 +194,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Expanded(
                 flex: _currentPage == 0 ? 1 : 2,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (_currentPage < _pages.length - 1) {
                       _pageController.nextPage(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeInOut,
                       );
                     } else {
-                      context.go(AppRoutes.login);
+                      await ref.read(authProvider.notifier).completeOnboarding();
+                      if (context.mounted) {
+                        context.go(AppRoutes.home);
+                      }
                     }
                   },
                   child: Text(
@@ -213,8 +218,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const Gap(16),
           
           TextButton(
-            onPressed: () {
-              context.go(AppRoutes.login);
+            onPressed: () async {
+              await ref.read(authProvider.notifier).completeOnboarding();
+              if (context.mounted) {
+                context.go(AppRoutes.home);
+              }
             },
             child: const Text('Skip'),
           ),
