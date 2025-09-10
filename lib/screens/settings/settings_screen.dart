@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gap/gap.dart';
 import '../../core/constants/app_routes.dart';
@@ -8,15 +9,16 @@ import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../services/database_service.dart';
 import '../../widgets/common/gradient_button.dart';
+import '../../providers/auth_provider.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final DatabaseService _databaseService = DatabaseService.instance;
   // Study preferences
   int _newCardsPerDay = 20;
@@ -675,7 +677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: value,
             min: min,
             max: max,
-            divisions: suffix == '' ? 10 : (max - min).toInt(),
+            divisions: suffix == '' ? 10 : ((max - min).toInt() > 0 ? (max - min).toInt() : null),
             onChanged: onChanged,
           ),
         ),
@@ -810,9 +812,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              context.go(AppRoutes.login);
+              try {
+                await ref.read(authProvider.notifier).signOut();
+                if (context.mounted) {
+                  context.go(AppRoutes.login);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Sign out failed: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: Text('Sign Out', style: TextStyle(color: AppColors.error)),
           ),
