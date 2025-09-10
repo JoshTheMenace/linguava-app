@@ -96,20 +96,24 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
       
-      setState(() {
-        _userDecks = deckModels;
-        _totalCards = totalCards;
-        _masteredCards = masteredCards;
-        _cardsToReview = cardsToReview;
-        _newCards = newCards;
-        _learningCards = learningCards;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _userDecks = deckModels;
+          _totalCards = totalCards;
+          _masteredCards = masteredCards;
+          _cardsToReview = cardsToReview;
+          _newCards = newCards;
+          _learningCards = learningCards;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       print('Error loading dashboard data: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -1,21 +1,24 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gap/gap.dart';
 import '../../core/constants/app_routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateMixin {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   
   // Mock user data
@@ -129,8 +132,45 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     super.dispose();
   }
 
+  void _handleSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(authProvider.notifier).signOut();
+      if (mounted) {
+        context.go(AppRoutes.home);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    
+    if (kDebugMode) {
+      print('=== PROFILE SCREEN AUTH STATE ===');
+      print('Is authenticated: ${authState.isAuthenticated}');
+      print('Is loading: ${authState.isLoading}');
+      print('Has completed onboarding: ${authState.hasCompletedOnboarding}');
+      print('User profile: ${authState.userProfile}');
+    }
+    
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -144,17 +184,141 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildProfileHeader(),
-              _buildTabBar(),
-              Expanded(
-                child: _buildTabContent(),
-              ),
-            ],
-          ),
+          child: authState.isAuthenticated 
+              ? _buildAuthenticatedProfile()
+              : _buildAuthPrompt(),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAuthenticatedProfile() {
+    return Column(
+      children: [
+        _buildAppBar(),
+        _buildProfileHeader(),
+        _buildTabBar(),
+        Expanded(
+          child: _buildTabContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAuthPrompt() {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        children: [
+          _buildAppBar(),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [AppColors.secondary, AppColors.primary],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.secondary.withOpacity(0.3),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.person_outline,
+                      size: 64,
+                      color: Colors.white,
+                    ),
+                  )
+                      .animate()
+                      .scale(duration: 800.ms, curve: Curves.elasticOut)
+                      .fadeIn(duration: 600.ms),
+                  
+                  const Gap(32),
+                  
+                  Text(
+                    'Sign In to View Profile',
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  )
+                      .animate()
+                      .fadeIn(delay: 400.ms, duration: 600.ms)
+                      .slideY(begin: 0.3, end: 0),
+                  
+                  const Gap(16),
+                  
+                  Text(
+                    'Access your learning progress, achievements, and personalized insights by signing in to your account.',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    textAlign: TextAlign.center,
+                  )
+                      .animate()
+                      .fadeIn(delay: 600.ms, duration: 600.ms)
+                      .slideY(begin: 0.3, end: 0),
+                  
+                  const Gap(48),
+                  
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GradientButton(
+                          onPressed: () => context.go(AppRoutes.login),
+                          text: 'Sign In',
+                        ),
+                      ),
+                      const Gap(16),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => context.go(AppRoutes.signup),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(color: AppColors.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+                            ),
+                          ),
+                          child: Text(
+                            'Create Account',
+                            style: TextStyle(color: AppColors.primary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                      .animate()
+                      .fadeIn(delay: 800.ms, duration: 600.ms)
+                      .slideY(begin: 0.3, end: 0),
+                  
+                  const Gap(24),
+                  
+                  TextButton(
+                    onPressed: () => context.go(AppRoutes.home),
+                    child: Text(
+                      'Continue Browsing',
+                      style: TextStyle(
+                        color: AppColors.hint,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  )
+                      .animate()
+                      .fadeIn(delay: 1000.ms, duration: 600.ms),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -187,12 +351,24 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
               backgroundColor: AppColors.surfaceVariant,
             ),
           ),
+          const Gap(8),
+          IconButton(
+            onPressed: () => _handleSignOut(),
+            icon: const Icon(Icons.logout, color: Colors.white),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.red.withOpacity(0.2),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildProfileHeader() {
+    final authState = ref.watch(authProvider);
+    final userName = authState.userProfile?['full_name'] ?? _userName;
+    final userEmail = authState.userProfile?['email'] ?? _userEmail;
+    
     return AnimatedCard(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Column(
@@ -205,7 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     radius: 40,
                     backgroundColor: AppColors.primary,
                     child: Text(
-                      _userName.split(' ').map((name) => name[0]).join('').toUpperCase(),
+                      userName.split(' ').map((name) => name[0]).join('').toUpperCase(),
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -238,14 +414,14 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _userName,
+                      userName,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const Gap(4),
                     Text(
-                      _userEmail,
+                      userEmail,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.hint,
                       ),
