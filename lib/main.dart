@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
-import 'core/utils/app_router.dart';
+import 'core/utils/router_service.dart';
+import 'services/auth_service.dart';
+import 'services/subscription_service.dart';
+import 'services/user_session_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +19,9 @@ void main() async {
     ),
   );
   
+  await AuthService().initialize();
+  await SubscriptionService().initialize();
+  await UserSessionService().initialize();
   
   runApp(
     const ProviderScope(
@@ -24,15 +30,15 @@ void main() async {
   );
 }
 
-class LinguavaApp extends StatelessWidget {
+class LinguavaApp extends ConsumerWidget {
   const LinguavaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'Linguava',
       theme: AppTheme.darkTheme,
-      routerConfig: appRouter,
+      routerConfig: RouterService.createRouter(ref),
       debugShowCheckedModeBanner: false,
     );
   }
