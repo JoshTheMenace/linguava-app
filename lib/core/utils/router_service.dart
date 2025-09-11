@@ -21,6 +21,8 @@ import '../../screens/settings/settings_screen.dart';
 import '../../screens/search/search_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/debug/debug_screen.dart';
+import '../../screens/learning_paths/learning_paths_screen.dart';
+import '../../screens/learning_paths/learning_path_progress_screen.dart';
 
 class RouterService {
   static GoRouter createRouter(WidgetRef ref) {
@@ -186,6 +188,19 @@ class RouterService {
           path: AppRoutes.debug,
           name: 'debug',
           builder: (context, state) => const DebugScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.learningPaths,
+          name: 'learningPaths',
+          builder: (context, state) => const LearningPathsScreen(),
+        ),
+        GoRoute(
+          path: '${AppRoutes.learningPathProgress}/:pathId',
+          name: 'learningPathProgress',
+          builder: (context, state) {
+            final pathId = state.pathParameters['pathId'] ?? '';
+            return LearningPathProgressScreen(pathId: pathId);
+          },
         ),
       ],
     );

@@ -16,4 +16,6 @@ class AppRoutes {
   static const String search = '/search';
   static const String profile = '/profile';
   static const String debug = '/debug';
+  static const String learningPaths = '/learning-paths';
+  static const String learningPathProgress = '/learning-path-progress';
 }

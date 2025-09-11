@@ -8,6 +8,10 @@ import 'daos/deck_dao.dart';
 import 'daos/flashcard_dao.dart';
 import 'daos/study_card_dao.dart';
 import 'daos/review_log_dao.dart';
+import 'daos/learning_path_dao.dart';
+import 'daos/lesson_dao.dart';
+import 'daos/lesson_card_dao.dart';
+import 'daos/user_progress_dao.dart';
 
 part 'database.g.dart';
 
@@ -99,6 +103,82 @@ class StudySessionsTable extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
+// Learning Path tables
+class LearningPaths extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 200)();
+  TextColumn get description => text()();
+  TextColumn get language => text()();
+  TextColumn get level => text()(); // beginner, intermediate, advanced
+  TextColumn get category => text()(); // grammar, vocabulary, kanji, etc
+  TextColumn get imageUrl => text().nullable()();
+  IntColumn get estimatedHours => integer()();
+  IntColumn get totalLessons => integer()();
+  BoolColumn get isOfficial => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class Lessons extends Table {
+  TextColumn get id => text()();
+  TextColumn get pathId => text().references(LearningPaths, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text().withLength(min: 1, max: 200)();
+  TextColumn get description => text()();
+  IntColumn get orderIndex => integer()();
+  IntColumn get estimatedMinutes => integer()();
+  TextColumn get prerequisites => text()(); // JSON array of lesson IDs
+  TextColumn get tags => text()(); // JSON array of tags
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class LessonCards extends Table {
+  TextColumn get lessonId => text().references(Lessons, #id, onDelete: KeyAction.cascade)();
+  TextColumn get flashcardId => text().references(Flashcards, #id, onDelete: KeyAction.cascade)();
+  IntColumn get orderIndex => integer()();
+  
+  @override
+  Set<Column> get primaryKey => {lessonId, flashcardId};
+}
+
+class UserPathProgress extends Table {
+  TextColumn get userId => text()();
+  TextColumn get pathId => text().references(LearningPaths, #id, onDelete: KeyAction.cascade)();
+  TextColumn get currentLessonId => text().nullable()();
+  IntColumn get completedLessons => integer().withDefault(const Constant(0))();
+  IntColumn get totalTimeSpent => integer().withDefault(const Constant(0))(); // minutes
+  RealColumn get progressPercentage => real().withDefault(const Constant(0.0))();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get lastStudiedAt => dateTime().nullable()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  @override
+  Set<Column> get primaryKey => {userId, pathId};
+}
+
+class UserLessonProgress extends Table {
+  TextColumn get userId => text()();
+  TextColumn get lessonId => text().references(Lessons, #id, onDelete: KeyAction.cascade)();
+  BoolColumn get isCompleted => boolean().withDefault(const Constant(false))();
+  BoolColumn get isUnlocked => boolean().withDefault(const Constant(false))();
+  IntColumn get completedCards => integer().withDefault(const Constant(0))();
+  IntColumn get totalCards => integer().withDefault(const Constant(0))();
+  IntColumn get timeSpent => integer().withDefault(const Constant(0))(); // minutes
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  @override
+  Set<Column> get primaryKey => {userId, lessonId};
+}
+
 @DriftDatabase(tables: [
   Decks,
   Flashcards, 
@@ -106,17 +186,26 @@ class StudySessionsTable extends Table {
   StudyCards,
   ReviewLogs,
   StudySessionsTable,
+  LearningPaths,
+  Lessons,
+  LessonCards,
+  UserPathProgress,
+  UserLessonProgress,
 ], daos: [
   DeckDao,
   FlashcardDao,
   StudyCardDao,
   ReviewLogDao,
+  LearningPathDao,
+  LessonDao,
+  LessonCardDao,
+  UserProgressDao,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -133,6 +222,10 @@ class AppDatabase extends _$AppDatabase {
   FlashcardDao get flashcardDao => FlashcardDao(this);
   StudyCardDao get studyCardDao => StudyCardDao(this);
   ReviewLogDao get reviewLogDao => ReviewLogDao(this);
+  LearningPathDao get learningPathDao => LearningPathDao(this);
+  LessonDao get lessonDao => LessonDao(this);
+  LessonCardDao get lessonCardDao => LessonCardDao(this);
+  UserProgressDao get userProgressDao => UserProgressDao(this);
 }
 
 LazyDatabase _openConnection() {

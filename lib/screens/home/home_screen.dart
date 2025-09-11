@@ -347,33 +347,54 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const Gap(16),
-        Row(
+        Column(
           children: [
-            Expanded(
-              child: GradientButton(
-                text: 'Study Now',
-                icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-                textStyle: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+            Row(
+              children: [
+                Expanded(
+                  child: GradientButton(
+                    text: 'Study Now',
+                    icon: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+                    textStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    onPressed: _startSmartStudySession,
+                  ),
                 ),
-                onPressed: _startSmartStudySession,
-              ),
+                const Gap(12),
+                Expanded(
+                  child: GradientButton(
+                    text: 'Add Cards',
+                    gradientColors: [AppColors.secondary, AppColors.primary],
+                    icon: const Icon(Icons.add, color: Colors.white, size: 20),
+                    textStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    onPressed: () {
+                      context.go(AppRoutes.addCard);
+                    },
+                  ),
+                ),
+              ],
             ),
             const Gap(12),
-            Expanded(
+            SizedBox(
+              width: double.infinity,
               child: GradientButton(
-                text: 'Add Cards',
-                gradientColors: [AppColors.secondary, AppColors.primary],
-                icon: const Icon(Icons.add, color: Colors.white, size: 20),
+                text: 'Learning Paths',
+                gradientColors: [AppColors.primary.withOpacity(0.8), AppColors.secondary.withOpacity(0.8)],
+                icon: const Icon(Icons.route, color: Colors.white, size: 20),
                 textStyle: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
                 onPressed: () {
-                  context.go(AppRoutes.addCard);
+                  context.go(AppRoutes.learningPaths);
                 },
               ),
             ),
