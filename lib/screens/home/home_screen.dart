@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
 import '../../widgets/common/gradient_button.dart';
 import '../../models/deck.dart';
+import '../../services/database_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,50 +18,104 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Deck> _mockDecks = [
-    Deck(
-      id: '1',
-      name: 'Spanish Basics',
-      description: 'Essential Spanish vocabulary for beginners',
-      totalCards: 150,
-      reviewedCards: 89,
-      masteredCards: 45,
-      language: 'Spanish',
-      difficulty: 'Beginner',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['Spanish', 'Vocabulary', 'Beginner'],
-    ),
-    Deck(
-      id: '2',
-      name: 'French Grammar',
-      description: 'Master French grammar rules and exceptions',
-      totalCards: 200,
-      reviewedCards: 156,
-      masteredCards: 98,
-      language: 'French',
-      difficulty: 'Intermediate',
-      createdAt: DateTime.now().subtract(const Duration(days: 14)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      creatorId: 'user1',
-      tags: ['French', 'Grammar', 'Intermediate'],
-    ),
-    Deck(
-      id: '3',
-      name: 'Business English',
-      description: 'Professional English vocabulary and phrases',
-      totalCards: 120,
-      reviewedCards: 45,
-      masteredCards: 12,
-      language: 'English',
-      difficulty: 'Advanced',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      updatedAt: DateTime.now(),
-      creatorId: 'user1',
-      tags: ['English', 'Business', 'Advanced'],
-    ),
-  ];
+  final DatabaseService _databaseService = DatabaseService.instance;
+  List<Deck> _userDecks = [];
+  int _totalCards = 0;
+  int _masteredCards = 0;
+  int _cardsToReview = 0;
+  int _newCards = 0;
+  int _learningCards = 0;
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+  
+  Future<void> _loadDashboardData() async {
+    try {
+      // Load decks from database
+      final decks = await _databaseService.database.deckDao.getAllDecks();
+      final deckModels = decks.map((deck) => Deck(
+        id: deck.id,
+        name: deck.name,
+        description: deck.description,
+        language: deck.language,
+        difficulty: deck.difficulty,
+        creatorId: deck.creatorId,
+        isPublic: deck.isPublic,
+        createdAt: deck.createdAt,
+        updatedAt: deck.updatedAt,
+      )).toList();
+      
+      // Calculate stats across all decks
+      int totalCards = 0;
+      int masteredCards = 0;
+      int cardsToReview = 0;
+      int newCards = 0;
+      int learningCards = 0;
+      
+      final now = DateTime.now();
+      
+      for (final deck in decks) {
+        final flashcards = await _databaseService.database.flashcardDao.getFlashcardsByDeck(deck.id);
+        totalCards += flashcards.length;
+        
+        // Analyze each card's study status
+        for (final flashcard in flashcards) {
+          try {
+            final studyCard = await _databaseService.database.studyCardDao.getStudyCard(flashcard.id);
+            
+            if (studyCard == null) {
+              // No study data yet, count as new
+              newCards++;
+            } else {
+              if (studyCard.isNew) {
+                newCards++;
+              } else if (studyCard.isLearning) {
+                learningCards++;
+                // Learning cards might also be due for review
+                if (studyCard.nextReviewDate != null && 
+                    studyCard.nextReviewDate!.isBefore(now.add(const Duration(minutes: 1)))) {
+                  cardsToReview++;
+                }
+              } else {
+                masteredCards++;
+                // Check if mastered card is due for review
+                if (studyCard.nextReviewDate != null && 
+                    studyCard.nextReviewDate!.isBefore(now.add(const Duration(minutes: 1)))) {
+                  cardsToReview++;
+                }
+              }
+            }
+          } catch (e) {
+            // Card might not have study data yet, count as new
+            newCards++;
+          }
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _userDecks = deckModels;
+          _totalCards = totalCards;
+          _masteredCards = masteredCards;
+          _cardsToReview = cardsToReview;
+          _newCards = newCards;
+          _learningCards = learningCards;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading dashboard data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,28 +132,37 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              _buildAppBar(),
-              SliverPadding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _buildWelcomeSection(),
-                    const Gap(24),
-                    _buildStatsOverview(),
-                    const Gap(32),
-                    _buildQuickActions(),
-                    const Gap(32),
-                    _buildRecentDecks(),
-                    const Gap(32),
-                    _buildContinueLearning(),
-                    const Gap(100),
-                  ]),
+          child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: _loadDashboardData,
+                child: CustomScrollView(
+                  slivers: [
+                    _buildAppBar(),
+                    SliverPadding(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          _buildWelcomeSection(),
+                          const Gap(24),
+                          _buildStatsOverview(),
+                          const Gap(32),
+                          _buildQuickActions(),
+                          const Gap(32),
+                          _buildRecentDecks(),
+                          const Gap(32),
+                          _buildContinueLearning(),
+                          const Gap(100),
+                        ]),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -193,34 +257,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatsOverview() {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.style,
-            title: 'Total Cards',
-            value: '470',
-            color: AppColors.primary,
-          ),
+        // First row - basic stats
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.style,
+                title: 'Total Cards',
+                value: _totalCards.toString(),
+                color: AppColors.primary,
+              ),
+            ),
+            const Gap(12),
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.layers,
+                title: 'Decks',
+                value: _userDecks.length.toString(),
+                color: AppColors.secondary,
+              ),
+            ),
+            const Gap(12),
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.school,
+                title: 'Mastered',
+                value: _masteredCards.toString(),
+                color: AppColors.success,
+              ),
+            ),
+          ],
         ),
-        const Gap(12),
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.trending_up,
-            title: 'Streak',
-            value: '12 days',
-            color: AppColors.secondary,
-          ),
-        ),
-        const Gap(12),
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.school,
-            title: 'Mastered',
-            value: '155',
-            color: AppColors.success,
-          ),
-        ),
+        const Gap(16),
+        // Second row - review status
+        _buildReviewSummary(),
       ],
     )
         .animate()
@@ -286,9 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
-                onPressed: () {
-                  context.go(AppRoutes.study);
-                },
+                onPressed: _startSmartStudySession,
               ),
             ),
             const Gap(12),
@@ -338,10 +408,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const Gap(16),
-        ...List.generate(
-          _mockDecks.length,
-          (index) => _buildDeckCard(_mockDecks[index], index),
-        ),
+        if (_userDecks.isEmpty) 
+          _buildNoDeckMessage()
+        else
+          ...List.generate(
+            _userDecks.take(3).length,
+            (index) => _buildDeckCard(_userDecks[index], index),
+          ),
       ],
     )
         .animate()
@@ -556,6 +629,289 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildReviewSummary() {
+    return AnimatedCard(
+      backgroundColor: AppColors.surfaceVariant,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _cardsToReview > 0 ? AppColors.warning.withOpacity(0.2) : AppColors.success.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _cardsToReview > 0 ? Icons.schedule : Icons.check_circle,
+                  color: _cardsToReview > 0 ? AppColors.warning : AppColors.success,
+                  size: 20,
+                ),
+              ),
+              const Gap(12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Review Status',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _cardsToReview > 0 
+                          ? '$_cardsToReview cards ready for review'
+                          : 'All caught up!',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.hint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_cardsToReview > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _cardsToReview.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  const Gap(8),
+                  GestureDetector(
+                    onTap: () => context.go(AppRoutes.debug),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.hint.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.bug_report,
+                        color: AppColors.hint,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Gap(12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildReviewStatusPill('New', _newCards, AppColors.secondary),
+              ),
+              const Gap(8),
+              Expanded(
+                child: _buildReviewStatusPill('Learning', _learningCards, AppColors.warning),
+              ),
+              const Gap(8),
+              Expanded(
+                child: _buildReviewStatusPill('Review', _cardsToReview, AppColors.error),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildReviewStatusPill(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            count.toString(),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: color,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Future<void> _startSmartStudySession() async {
+    try {
+      // Find the best deck to study from
+      String? bestDeckId = await _findBestDeckToStudy();
+      
+      if (bestDeckId != null) {
+        // Navigate to study screen with the selected deck
+        if (mounted) {
+          context.go('${AppRoutes.study}?deckId=$bestDeckId');
+        }
+      } else {
+        // Show dialog if no cards available to study
+        if (mounted) {
+          _showNoCardsDialog();
+        }
+      }
+    } catch (e) {
+      print('Error starting study session: $e');
+      if (mounted) {
+        _showNoCardsDialog();
+      }
+    }
+  }
+  
+  Future<String?> _findBestDeckToStudy() async {
+    try {
+      final decks = await _databaseService.database.deckDao.getAllDecks();
+      
+      // Priority 1: Find deck with cards due for review
+      for (final deck in decks) {
+        final flashcards = await _databaseService.database.flashcardDao.getFlashcardsByDeck(deck.id);
+        if (flashcards.isEmpty) continue;
+        
+        // Check if deck has cards ready for review
+        bool hasDueCards = false;
+        bool hasNewCards = false;
+        bool hasLearningCards = false;
+        
+        final now = DateTime.now();
+        
+        for (final flashcard in flashcards) {
+          try {
+            final studyCard = await _databaseService.database.studyCardDao.getStudyCard(flashcard.id);
+            
+            if (studyCard == null) {
+              hasNewCards = true; // Card has no study data, so it's new
+            } else {
+              if (studyCard.isNew) {
+                hasNewCards = true;
+              } else if (studyCard.isLearning) {
+                hasLearningCards = true;
+                // Check if learning card is due
+                if (studyCard.nextReviewDate != null && 
+                    studyCard.nextReviewDate!.isBefore(now.add(const Duration(minutes: 1)))) {
+                  hasDueCards = true;
+                }
+              } else {
+                // Mature card - check if due for review
+                if (studyCard.nextReviewDate != null && 
+                    studyCard.nextReviewDate!.isBefore(now.add(const Duration(minutes: 1)))) {
+                  hasDueCards = true;
+                }
+              }
+            }
+          } catch (e) {
+            // Error getting study card, treat as new
+            hasNewCards = true;
+          }
+        }
+        
+        // Prioritize decks with due cards, then learning cards, then new cards
+        if (hasDueCards || hasLearningCards || hasNewCards) {
+          return deck.id;
+        }
+      }
+      
+      // If no cards are due, return the first deck with any cards
+      for (final deck in decks) {
+        final flashcards = await _databaseService.database.flashcardDao.getFlashcardsByDeck(deck.id);
+        if (flashcards.isNotEmpty) {
+          return deck.id;
+        }
+      }
+      
+      return null; // No decks with cards found
+    } catch (e) {
+      print('Error finding best deck to study: $e');
+      return null;
+    }
+  }
+  
+  void _showNoCardsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('No Cards to Study'),
+        content: Text(_userDecks.isEmpty 
+            ? 'You don\'t have any decks yet. Create a deck and add some cards to start studying!'
+            : 'No cards are ready for study right now. Try adding more cards to your decks or check back later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+          if (_userDecks.isEmpty)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.go(AppRoutes.createDeck);
+              },
+              child: const Text('Create Deck'),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildNoDeckMessage() {
+    return AnimatedCard(
+      child: Column(
+        children: [
+          Icon(
+            Icons.layers_outlined,
+            size: 48,
+            color: AppColors.hint,
+          ),
+          const Gap(16),
+          Text(
+            'No Decks Yet',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Gap(8),
+          Text(
+            'Create your first deck to start learning!',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.hint,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const Gap(16),
+          ElevatedButton.icon(
+            onPressed: () => context.go(AppRoutes.createDeck),
+            icon: const Icon(Icons.add),
+            label: const Text('Create Deck'),
           ),
         ],
       ),

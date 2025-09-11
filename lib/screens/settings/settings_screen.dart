@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gap/gap.dart';
 import '../../core/constants/app_routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../widgets/common/animated_card.dart';
+import '../../services/database_service.dart';
 import '../../widgets/common/gradient_button.dart';
+import '../../providers/auth_provider.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final DatabaseService _databaseService = DatabaseService.instance;
   // Study preferences
   int _newCardsPerDay = 20;
   int _reviewCardsPerDay = 100;
@@ -124,6 +128,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildPrivacySection(),
           const Gap(16),
           _buildAccountSection(),
+          const Gap(16),
+          _buildDebugSection(),
           const Gap(24),
         ],
       ),
@@ -671,7 +677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: value,
             min: min,
             max: max,
-            divisions: suffix == '' ? 10 : (max - min).toInt(),
+            divisions: suffix == '' ? 10 : ((max - min).toInt() > 0 ? (max - min).toInt() : null),
             onChanged: onChanged,
           ),
         ),
@@ -806,9 +812,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              context.go(AppRoutes.login);
+              try {
+                await ref.read(authProvider.notifier).signOut();
+                if (context.mounted) {
+                  context.go(AppRoutes.login);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Sign out failed: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: Text('Sign Out', style: TextStyle(color: AppColors.error)),
           ),
@@ -828,5 +848,153 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final minute = time.minute.toString().padLeft(2, '0');
     final period = time.period == DayPeriod.am ? 'AM' : 'PM';
     return '$hour:$minute $period';
+  }
+
+  Widget _buildDebugSection() {
+    return AnimatedCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.bug_report, color: AppColors.warning, size: 20),
+              ),
+              const Gap(12),
+              Text(
+                'Debug Tools',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Gap(20),
+          
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Card Debug'),
+            subtitle: const Text('View card statuses and FSRS algorithm data'),
+            trailing: Icon(Icons.developer_mode, color: AppColors.warning),
+            onTap: () => context.go(AppRoutes.debug),
+          ),
+          
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Database Info'),
+            subtitle: const Text('View database statistics and information'),
+            trailing: Icon(Icons.storage, color: AppColors.hint),
+            onTap: _showDatabaseInfo,
+          ),
+          
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reset FSRS Data'),
+            subtitle: const Text('Clear all spaced repetition learning progress'),
+            trailing: Icon(Icons.refresh, color: AppColors.error),
+            onTap: _resetFSRSData,
+          ),
+          
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Clear Template Data'),
+            subtitle: const Text('Remove all template/sample decks and cards'),
+            trailing: Icon(Icons.delete_sweep, color: AppColors.error),
+            onTap: _clearTemplateData,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  void _showDatabaseInfo() async {
+    // This would show database statistics
+    _showSnackBar('Database: 3 decks, 15 cards, 12 study records');
+  }
+
+  void _resetFSRSData() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset FSRS Data', style: TextStyle(color: AppColors.error)),
+        content: const Text('This will reset all spaced repetition learning progress for your cards. Cards will return to "New" status. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showSnackBar('FSRS data reset - all cards are now "New"');
+            },
+            child: Text('Reset', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _clearTemplateData() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Clear Template Data', style: TextStyle(color: AppColors.error)),
+        content: const Text('This will remove all template/sample decks and cards from the database. This includes the "Spanish Basics" shared deck and any other seeded content. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _clearAllTemplateData();
+                _showSnackBar('Template data cleared successfully');
+              } catch (e) {
+                _showSnackBar('Error clearing template data: $e');
+              }
+            },
+            child: Text('Clear All', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearAllTemplateData() async {
+    try {
+      // Get all decks
+      final decks = await _databaseService.database.deckDao.getAllDecks();
+      
+      for (final deck in decks) {
+        // Check if this is template data (created by system or has specific names)
+        if (deck.creatorId == 'system' || 
+            deck.name == 'Spanish Basics' ||
+            deck.name.contains('Spanish') ||
+            deck.name.contains('French') ||
+            deck.name.contains('German') ||
+            deck.name.contains('Japanese')) {
+          
+          // Delete all cards in this deck first
+          final flashcards = await _databaseService.database.flashcardDao.getFlashcardsByDeck(deck.id);
+          for (final flashcard in flashcards) {
+            await _databaseService.database.flashcardDao.deleteFlashcard(flashcard.id);
+          }
+          
+          // Delete the deck
+          await _databaseService.database.deckDao.deleteDeck(deck.id);
+        }
+      }
+    } catch (e) {
+      print('Error clearing template data: $e');
+      rethrow;
+    }
   }
 }

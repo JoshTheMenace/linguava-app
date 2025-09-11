@@ -17,6 +17,7 @@ import '../../screens/stats/stats_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../../screens/search/search_screen.dart';
 import '../../screens/profile/profile_screen.dart';
+import '../../screens/debug/debug_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
@@ -116,6 +117,11 @@ final appRouter = GoRouter(
       path: AppRoutes.profile,
       name: 'profile',
       builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.debug,
+      name: 'debug',
+      builder: (context, state) => const DebugScreen(),
     ),
   ],
 );

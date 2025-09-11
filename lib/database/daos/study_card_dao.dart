@@ -66,7 +66,7 @@ class StudyCardDao extends DatabaseAccessor<AppDatabase> with _$StudyCardDaoMixi
         studyCards.nextReviewDate.isSmallerOrEqualValue(now)
       );
 
-    if (deckId != null) {
+    if (deckId != null && deckId.isNotEmpty) {
       query = query..where(flashcards.deckId.equals(deckId));
     }
 
@@ -98,7 +98,7 @@ class StudyCardDao extends DatabaseAccessor<AppDatabase> with _$StudyCardDaoMixi
       leftOuterJoin(flashcards, flashcards.id.equalsExp(studyCards.flashcardId)),
     ])..where(studyCards.isNew.equals(true));
 
-    if (deckId != null) {
+    if (deckId != null && deckId.isNotEmpty) {
       query = query..where(flashcards.deckId.equals(deckId));
     }
 
@@ -130,7 +130,7 @@ class StudyCardDao extends DatabaseAccessor<AppDatabase> with _$StudyCardDaoMixi
       leftOuterJoin(flashcards, flashcards.id.equalsExp(studyCards.flashcardId)),
     ])..where(studyCards.isLearning.equals(true));
 
-    if (deckId != null) {
+    if (deckId != null && deckId.isNotEmpty) {
       query = query..where(flashcards.deckId.equals(deckId));
     }
 

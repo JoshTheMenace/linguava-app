@@ -10,6 +10,7 @@ import '../../widgets/common/study_grade_buttons.dart';
 import '../../models/study_card.dart';
 import '../../models/flashcard.dart';
 import '../../services/fsrs_service.dart';
+import '../../services/database_service.dart';
 
 class StudyScreen extends StatefulWidget {
   final String deckId;
@@ -29,6 +30,7 @@ class _StudyScreenState extends State<StudyScreen> {
   late final FSRSService _fsrsService;
   List<StudyCard> _studyCards = [];
   bool _isLoading = true;
+  String _deckName = 'Loading...';
 
   @override
   void initState() {
@@ -39,10 +41,24 @@ class _StudyScreenState extends State<StudyScreen> {
 
   Future<void> _initializeStudySession() async {
     try {
+      // Load deck name from database
+      final databaseService = DatabaseService.instance;
+      if (widget.deckId.isNotEmpty) {
+        final deck = await databaseService.database.deckDao.getDeckById(widget.deckId);
+        if (deck != null) {
+          _deckName = deck.name;
+        } else {
+          _deckName = 'Unknown Deck';
+        }
+      } else {
+        _deckName = 'Mixed Study';
+      }
+      
       // Get due cards first, then new cards if we need more
-      final dueCards = await _fsrsService.getDueCards(deckId: widget.deckId, limit: 10);
-      final newCards = await _fsrsService.getNewCards(deckId: widget.deckId, limit: 5);
-      final learningCards = await _fsrsService.getLearningCards(deckId: widget.deckId);
+      final deckIdForQuery = widget.deckId.isNotEmpty ? widget.deckId : null;
+      final dueCards = await _fsrsService.getDueCards(deckId: deckIdForQuery, limit: 10);
+      final newCards = await _fsrsService.getNewCards(deckId: deckIdForQuery, limit: 5);
+      final learningCards = await _fsrsService.getLearningCards(deckId: deckIdForQuery);
       
       // Combine and prioritize: learning > due > new
       final allCards = <StudyCard>[];
@@ -164,7 +180,7 @@ class _StudyScreenState extends State<StudyScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Spanish Basics',
+                  _deckName,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
