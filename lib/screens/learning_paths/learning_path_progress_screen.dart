@@ -414,7 +414,7 @@ class _LearningPathProgressScreenState extends ConsumerState<LearningPathProgres
               text: progress.isCompleted ? 'Review Lesson' : 'Start Lesson',
               onPressed: () {
                 Navigator.pop(context);
-                // TODO: Navigate to lesson screen
+                context.push('/lesson/${lesson.id}');
               },
             ),
           ],

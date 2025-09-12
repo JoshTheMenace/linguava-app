@@ -23,6 +23,7 @@ import '../../screens/profile/profile_screen.dart';
 import '../../screens/debug/debug_screen.dart';
 import '../../screens/learning_paths/learning_paths_screen.dart';
 import '../../screens/learning_paths/learning_path_progress_screen.dart';
+import '../../screens/lessons/lesson_screen.dart';
 
 class RouterService {
   static GoRouter createRouter(WidgetRef ref) {
@@ -200,6 +201,15 @@ class RouterService {
           builder: (context, state) {
             final pathId = state.pathParameters['pathId'] ?? '';
             return LearningPathProgressScreen(pathId: pathId);
+          },
+        ),
+        GoRoute(
+          path: '/lesson/:lessonId',
+          name: 'lesson',
+          builder: (context, state) {
+            final lessonId = state.pathParameters['lessonId'] ?? '';
+            final pathId = state.uri.queryParameters['pathId'];
+            return LessonScreen(lessonId: lessonId, pathId: pathId);
           },
         ),
       ],
