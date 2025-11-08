@@ -9,7 +9,10 @@ class GeminiLiveService {
   WebSocketChannel? _channel;
   final String apiKey;
   bool _isConnected = false;
+  bool _isDisposed = false;
   int _componentIdCounter = 0;
+  List<Map<String, dynamic>> _studyCards = [];
+  bool _isLessonMode = false;
 
   // Streams for bidirectional communication
   final StreamController<Uint8List> _audioOutputController =
@@ -43,6 +46,41 @@ class GeminiLiveService {
 
   GeminiLiveService({required this.apiKey});
 
+  /// Set the study cards for the current session
+  void setStudyCards(List<Map<String, dynamic>> cards, {bool isLessonMode = false}) {
+    _studyCards = cards;
+    _isLessonMode = isLessonMode;
+    print('Updated study cards: ${cards.length} cards loaded (lesson mode: $isLessonMode)');
+  }
+
+  /// Get current study cards
+  List<Map<String, dynamic>> get studyCards => _studyCards;
+
+  /// Start the teaching session automatically
+  Future<void> startTeachingSession() async {
+    if (!_isConnected) {
+      print('Cannot start teaching session - not connected');
+      return;
+    }
+
+    if (_studyCards.isEmpty) {
+      print('Cannot start teaching session - no study cards loaded');
+      return;
+    }
+
+    // Send an initial message to prompt the AI to start teaching
+    await Future.delayed(const Duration(milliseconds: 500)); // Give connection time to stabilize
+
+    final initialMessage = '''Hello! I'm ready to learn Japanese. Let's start with the vocabulary review session. Please teach me the words you have prepared for me today, starting with the most overdue ones.''';
+
+    try {
+      await sendText(initialMessage);
+      print('Teaching session started');
+    } catch (e) {
+      print('Failed to start teaching session: $e');
+    }
+  }
+
   /// Connect to the Gemini Live API
   Future<void> connect({
     String model = 'models/gemini-2.5-flash-native-audio-preview-09-2025',
@@ -65,36 +103,59 @@ class GeminiLiveService {
           'systemInstruction': {
             'parts': [
               {
-                'text': '''You are Jarvis, an advanced AI life support and navigation system for astronauts on Mars. You are helpful, intelligent, proactive, and have a sophisticated personality with a touch of wit and humor.
+                'text': '''You are a friendly and supportive Japanese language learning AI assistant. You are patient, encouraging, and skilled at teaching Japanese in an engaging way.
 
-You monitor the user's vital signs and suit systems in real-time. At the start of each conversation, you receive the current vital status including:
-- Heart rate (BPM)
-- Oxygen level (%)
-- Suit pressure (PSI)
-- Core temperature (°C)
-- Battery level (%)
-- Radiation exposure (mSv/hr)
-- System status (NOMINAL/WARNING/CRITICAL)
+Your main goals are to:
+- Help users learn and practice Japanese conversation
+- Teach vocabulary, grammar, kanji, and pronunciation
+- Provide natural Japanese examples with translations
+- Correct pronunciation and grammar gently but clearly
+- Create interactive learning exercises and flashcards
+- Adapt to the user's skill level (beginner, intermediate, advanced)
 
-You have visual capabilities through the user's helmet camera feed. When users ask "what do you see?", "describe what you're looking at", or similar questions, analyze the video frames you're receiving and provide clear, detailed descriptions of what you observe.
+When teaching, always consider:
+- Provide hiragana readings for kanji when helpful
+- Include romaji for complete beginners when requested
+- Explain grammar points clearly with examples
+- Use natural, conversational Japanese
+- Be encouraging and celebrate progress
 
-You help users with:
-- Monitoring vital signs and alerting to anomalies
-- Managing notes and reminders
-- Creating mission task lists and tracking task completion
-- Providing information and mission assistance
-- Displaying relevant UI components when needed
-- Visual analysis of the environment through the helmet camera
+Use the learning tools available to you:
+- show_flashcard: Display vocabulary flashcards with Japanese and English
+- show_sentence_review: Present sentences for study with translations and explanations
+- show_speaking_exercise: Create speaking practice prompts for the user
+- show_vocabulary_list: Display organized vocabulary lists by theme
+- show_grammar_explanation: Explain grammar concepts with examples
+- show_kanji_practice: Teach kanji with readings and example words
+- show_listening_exercise: Create listening comprehension exercises
+- clear_screen: Remove all displayed components
 
-When vital signs show WARNING or CRITICAL status, proactively mention this in your responses and provide relevant advice.
+${_studyCards.isNotEmpty ? '''
+CURRENT STUDY SESSION:
+${_isLessonMode ? 'This is a STRUCTURED LESSON with exactly ${_studyCards.length} word${_studyCards.length == 1 ? '' : 's'}.' : 'You are conducting a vocabulary review session.'}
+${_isLessonMode ? 'After teaching all ${_studyCards.length} word${_studyCards.length == 1 ? '' : 's'}, the lesson will END automatically.' : ''}
 
-For task management:
-- When users request to create tasks (e.g., "create a task list for analyzing 2 samples"), use create_task_list to display a numbered task list on screen
-- Remember the task list ID you create (it will be returned in the format "component_X")
-- When users say they completed a task (e.g., "I completed task 1" or "mark task 2 as done"), use complete_task with the task_list_id and task_number (1-indexed)
-- Tasks are numbered starting from 1, and users refer to them by these numbers
+Words to teach:
+${_studyCards.map((card) => '- ${card['word']} (${card['romaji']}): ${card['meaning']}\n  Example: ${card['example']} = ${card['exampleMeaning']}${card['isDue'] == true ? ' [DUE FOR REVIEW]' : ' [NEW]'}').join('\n')}
 
-When users ask to see notes, reminders, calendar events, or lists, use the appropriate tool calls to display them on screen. Be conversational but efficient, and always aim to be genuinely helpful while maintaining awareness of the user's safety as a Mars astronaut.'''
+Please teach these words one by one. For each word:
+1. Show a flashcard using show_flashcard
+2. Teach pronunciation and usage
+3. Give example sentences
+4. Have the user practice saying it
+5. **IMPORTANT**: Before moving to the next word, ALWAYS call update_card_rating to track progress:
+   - Use "again" if user couldn't recall, used incorrectly, or said they don't know it
+   - Use "hard" if user struggled but eventually got it with help
+   - Use "good" (DEFAULT) if user practiced correctly and showed understanding
+   - Use "easy" ONLY if user explicitly says they know it very well or demonstrates mastery
+6. ${_isLessonMode ? 'If there are more words, move to the next word. If this was the LAST word, say a brief congratulatory message like "Great work! You\'ve completed today\'s lesson." and STOP. Do NOT ask what else they want to learn.' : 'Move to the next word'}
+
+Focus ONLY on these words in this session. ${!_isLessonMode ? 'Start with the most overdue cards first.' : ''}
+CRITICAL: You MUST call update_card_rating for each word before moving on - this is how we track learning progress!
+${_isLessonMode ? '\nREMEMBER: After teaching ALL ${_studyCards.length} word${_studyCards.length == 1 ? '' : 's'}, say congratulations and END the conversation. The lesson will complete automatically.' : ''}
+''' : ''}
+
+Be conversational, patient, and make learning Japanese fun and engaging!'''
               }
             ]
           },
@@ -110,152 +171,222 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
             {
               'functionDeclarations': [
                 {
-                  'name': 'show_note',
-                  'description': 'Display a note on the screen. Use this when the user wants to see a note or when you create a new note for them.',
+                  'name': 'show_flashcard',
+                  'description': 'Display a flashcard for vocabulary learning. Use this when teaching new words or when the user requests flashcards.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
-                      'title': {
+                      'front': {
                         'type': 'string',
-                        'description': 'The title of the note'
+                        'description': 'The front of the flashcard (typically Japanese word/phrase)'
                       },
-                      'content': {
+                      'back': {
                         'type': 'string',
-                        'description': 'The content/body of the note'
+                        'description': 'The back of the flashcard (typically English meaning)'
+                      },
+                      'hiragana': {
+                        'type': 'string',
+                        'description': 'Hiragana reading of the Japanese text (optional)'
+                      },
+                      'romaji': {
+                        'type': 'string',
+                        'description': 'Romaji transliteration (optional, for beginners)'
                       }
                     },
-                    'required': ['title', 'content']
+                    'required': ['front', 'back']
                   }
                 },
                 {
-                  'name': 'show_reminder',
-                  'description': 'Display a reminder on the screen. Use this when the user wants to set a reminder or see an existing reminder.',
+                  'name': 'show_sentence_review',
+                  'description': 'Display a sentence for review and study. Use this to teach sentence patterns and real usage examples.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
-                      'title': {
+                      'japanese': {
                         'type': 'string',
-                        'description': 'The title/main text of the reminder'
+                        'description': 'The Japanese sentence'
                       },
-                      'time': {
+                      'english': {
                         'type': 'string',
-                        'description': 'ISO 8601 formatted date-time string for when the reminder should trigger'
+                        'description': 'English translation of the sentence'
                       },
-                      'description': {
+                      'hiragana': {
                         'type': 'string',
-                        'description': 'Optional additional details about the reminder'
+                        'description': 'Hiragana reading (optional)'
+                      },
+                      'romaji': {
+                        'type': 'string',
+                        'description': 'Romaji transliteration (optional)'
+                      },
+                      'explanation': {
+                        'type': 'string',
+                        'description': 'Grammar or usage explanation (optional)'
                       }
                     },
-                    'required': ['title', 'time']
+                    'required': ['japanese', 'english']
                   }
                 },
                 {
-                  'name': 'show_calendar_event',
-                  'description': 'Display a calendar event on the screen. Use this when the user wants to schedule an event or see an existing event.',
+                  'name': 'show_speaking_exercise',
+                  'description': 'Create a speaking practice exercise for the user. Use this to encourage oral practice.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
-                      'title': {
+                      'prompt': {
                         'type': 'string',
-                        'description': 'The title of the event'
+                        'description': 'The instruction or scenario for the speaking exercise (e.g., "Introduce yourself in Japanese")'
                       },
-                      'startTime': {
+                      'targetPhrase': {
                         'type': 'string',
-                        'description': 'ISO 8601 formatted date-time string for when the event starts'
+                        'description': 'The target phrase or sentence the user should practice'
                       },
-                      'endTime': {
+                      'hiragana': {
                         'type': 'string',
-                        'description': 'ISO 8601 formatted date-time string for when the event ends (optional)'
+                        'description': 'Hiragana reading (optional)'
                       },
-                      'description': {
+                      'romaji': {
                         'type': 'string',
-                        'description': 'Optional description or details about the event'
+                        'description': 'Romaji transliteration (optional)'
+                      },
+                      'hints': {
+                        'type': 'string',
+                        'description': 'Optional hints or tips for pronunciation'
                       }
                     },
-                    'required': ['title', 'startTime']
+                    'required': ['prompt', 'targetPhrase']
                   }
                 },
                 {
-                  'name': 'show_list',
-                  'description': 'Display a list on the screen. Use this for todo lists, shopping lists, or any bulleted list of items.',
+                  'name': 'show_vocabulary_list',
+                  'description': 'Display an organized vocabulary list. Use this to present themed vocabulary or word lists.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
                       'title': {
                         'type': 'string',
-                        'description': 'The title of the list'
+                        'description': 'The title/theme of the vocabulary list (e.g., "Food Vocabulary", "Daily Greetings")'
                       },
-                      'items': {
+                      'words': {
+                        'type': 'array',
+                        'items': {'type': 'object'},
+                        'description': 'Array of word objects with japanese, english, and optional hiragana/romaji fields'
+                      }
+                    },
+                    'required': ['title', 'words']
+                  }
+                },
+                {
+                  'name': 'show_grammar_explanation',
+                  'description': 'Display a grammar explanation. Use this to teach grammar concepts, particles, verb forms, etc.',
+                  'parameters': {
+                    'type': 'object',
+                    'properties': {
+                      'title': {
+                        'type': 'string',
+                        'description': 'The grammar topic (e.g., "Using the particle は (wa)", "Te-form verbs")'
+                      },
+                      'explanation': {
+                        'type': 'string',
+                        'description': 'Clear explanation of the grammar concept'
+                      },
+                      'examples': {
                         'type': 'array',
                         'items': {'type': 'string'},
-                        'description': 'Array of items in the list'
+                        'description': 'Example sentences demonstrating the grammar (optional)'
                       }
                     },
-                    'required': ['title', 'items']
+                    'required': ['title', 'explanation']
                   }
                 },
                 {
-                  'name': 'show_card',
-                  'description': 'Display a custom information card on the screen. Use this for displaying general information, summaries, or any structured content.',
+                  'name': 'show_kanji_practice',
+                  'description': 'Display kanji for practice and study. Use this when teaching kanji characters.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
-                      'title': {
+                      'kanji': {
                         'type': 'string',
-                        'description': 'The main title of the card'
+                        'description': 'The kanji character to practice'
                       },
-                      'subtitle': {
+                      'meaning': {
                         'type': 'string',
-                        'description': 'Optional subtitle or secondary heading'
+                        'description': 'The meaning of the kanji in English'
                       },
-                      'content': {
-                        'type': 'string',
-                        'description': 'The main content to display in the card'
-                      }
-                    },
-                    'required': ['title']
-                  }
-                },
-                {
-                  'name': 'create_task_list',
-                  'description': 'Create a task list for mission activities. Use this when the user asks to create tasks, a checklist, or track activities (e.g., "create tasks for analyzing samples"). Each task can be marked complete later.',
-                  'parameters': {
-                    'type': 'object',
-                    'properties': {
-                      'title': {
-                        'type': 'string',
-                        'description': 'The title of the task list (e.g., "Sample Analysis Tasks", "Daily Mission Checklist")'
-                      },
-                      'tasks': {
+                      'readings': {
                         'type': 'array',
                         'items': {'type': 'string'},
-                        'description': 'Array of task descriptions. Each will be created as an incomplete task.'
+                        'description': 'On-yomi and kun-yomi readings'
+                      },
+                      'examples': {
+                        'type': 'array',
+                        'items': {'type': 'string'},
+                        'description': 'Example words using this kanji (optional)'
                       }
                     },
-                    'required': ['title', 'tasks']
+                    'required': ['kanji', 'meaning', 'readings']
                   }
                 },
                 {
-                  'name': 'complete_task',
-                  'description': 'Mark a task as complete in an existing task list. Use this when the user indicates they completed a task (e.g., "mark the first task complete", "I finished analyzing sample 1").',
+                  'name': 'show_listening_exercise',
+                  'description': 'Create a listening comprehension exercise. Use this to practice listening skills.',
                   'parameters': {
                     'type': 'object',
                     'properties': {
-                      'task_list_id': {
+                      'instruction': {
                         'type': 'string',
-                        'description': 'The ID of the task list component'
+                        'description': 'Instructions for the listening exercise'
                       },
-                      'task_number': {
-                        'type': 'integer',
-                        'description': 'The 1-based index of the task to complete (e.g., 1 for first task, 2 for second)'
+                      'targetSentence': {
+                        'type': 'string',
+                        'description': 'The Japanese sentence to listen for'
+                      },
+                      'hiragana': {
+                        'type': 'string',
+                        'description': 'Hiragana reading (optional)'
+                      },
+                      'romaji': {
+                        'type': 'string',
+                        'description': 'Romaji transliteration (optional)'
                       }
                     },
-                    'required': ['task_list_id', 'task_number']
+                    'required': ['instruction', 'targetSentence']
+                  }
+                },
+                {
+                  'name': 'update_card_rating',
+                  'description': '''Update the spaced repetition rating for a vocabulary word after the user has practiced it.
+Call this when moving on to the next word to track the user's learning progress.
+
+Rating guidelines:
+- again (1): User used word incorrectly, expressed they don't know it, or couldn't recall it
+- hard (2): User had trouble but eventually understood/used it correctly with help
+- good (3): User practiced correctly, showed understanding (DEFAULT - use this most often)
+- easy (4): ONLY if user explicitly says they know it very well or demonstrates mastery
+
+Always call this before moving to the next word to ensure progress is tracked.''',
+                  'parameters': {
+                    'type': 'object',
+                    'properties': {
+                      'word': {
+                        'type': 'string',
+                        'description': 'The Japanese word being rated (e.g., "こんにちは")'
+                      },
+                      'rating': {
+                        'type': 'string',
+                        'enum': ['again', 'hard', 'good', 'easy'],
+                        'description': 'The rating based on user performance: again (didn\'t know), hard (difficult), good (understood), easy (mastered)'
+                      },
+                      'reason': {
+                        'type': 'string',
+                        'description': 'Brief explanation of why this rating was chosen (optional, for logging)'
+                      }
+                    },
+                    'required': ['word', 'rating']
                   }
                 },
                 {
                   'name': 'clear_screen',
-                  'description': 'Clear all UI components from the screen. Use this when the user wants to dismiss all notes, reminders, lists, and other displayed items.',
+                  'description': 'Clear all UI components from the screen. Use this when the user wants to start fresh or clear all displayed learning materials.',
                   'parameters': {
                     'type': 'object',
                     'properties': {}
@@ -281,25 +412,36 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
           print('!!! WebSocket error: $error');
           print('!!! Error type: ${error.runtimeType}');
           _isConnected = false;
-          _connectionStateController.add(false);
+          if (!_isDisposed && !_connectionStateController.isClosed) {
+            _connectionStateController.add(false);
+          }
         },
         onDone: () {
           print('!!! WebSocket connection closed');
           _isConnected = false;
-          _connectionStateController.add(false);
+          if (!_isDisposed && !_connectionStateController.isClosed) {
+            _connectionStateController.add(false);
+          }
         },
         cancelOnError: false,
       );
     } catch (e) {
       print('Error connecting to Gemini Live API: $e');
       _isConnected = false;
-      _connectionStateController.add(false);
+      if (!_isDisposed && !_connectionStateController.isClosed) {
+        _connectionStateController.add(false);
+      }
       rethrow;
     }
   }
 
   /// Handle incoming messages from the WebSocket
   void _handleIncomingMessage(dynamic message) {
+    // Ignore messages if service is disposed
+    if (_isDisposed) {
+      return;
+    }
+
     try {
       // Convert binary data to string if needed
       String messageString;
@@ -342,13 +484,17 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
               final audioB64 = part['inlineData']['data'];
               final audioBytes = base64Decode(audioB64);
               print('>>> Received audio: ${audioBytes.length} bytes');
-              _audioOutputController.add(audioBytes);
+              if (!_isDisposed && !_audioOutputController.isClosed) {
+                _audioOutputController.add(audioBytes);
+              }
             }
 
             // Text data (regular text responses)
             if (part['text'] != null) {
               print('>>> Received text: ${part['text']}');
-              _textOutputController.add(part['text']);
+              if (!_isDisposed && !_textOutputController.isClosed) {
+                _textOutputController.add(part['text']);
+              }
             }
           }
         }
@@ -356,7 +502,9 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
         // Check for turn completion (interruption handling)
         if (data['serverContent']['turnComplete'] == true) {
           print('>>> Turn complete');
-          _turnCompleteController.add(true);
+          if (!_isDisposed && !_turnCompleteController.isClosed) {
+            _turnCompleteController.add(true);
+          }
         }
       }
 
@@ -485,6 +633,11 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
 
   /// Handle function calls from Gemini
   void _handleFunctionCall(Map<String, dynamic> functionCall) {
+    // Ignore if service is disposed
+    if (_isDisposed || _toolCallController.isClosed) {
+      return;
+    }
+
     final functionName = functionCall['name'];
     final functionId = functionCall['id'];
     final args = functionCall['args'] as Map<String, dynamic>?;
@@ -494,93 +647,116 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
     String result = 'success';
 
     switch (functionName) {
-      case 'show_note':
+      case 'show_flashcard':
         if (args != null) {
-          print('=== Creating note: ${args['title']}');
+          print('=== Creating flashcard: ${args['front']}');
           _toolCallController.add({
-            'function': 'show_note',
-            'title': args['title'],
-            'content': args['content'],
+            'function': 'show_flashcard',
+            'front': args['front'],
+            'back': args['back'],
+            'hiragana': args['hiragana'],
+            'romaji': args['romaji'],
           });
-          result = 'Note "${args['title']}" displayed successfully';
+          result = 'Flashcard displayed successfully';
         }
         break;
 
-      case 'show_reminder':
+      case 'show_sentence_review':
         if (args != null) {
-          print('=== Creating reminder: ${args['title']}');
+          print('=== Creating sentence review: ${args['japanese']}');
           _toolCallController.add({
-            'function': 'show_reminder',
-            'title': args['title'],
-            'time': args['time'],
-            'description': args['description'],
+            'function': 'show_sentence_review',
+            'japanese': args['japanese'],
+            'english': args['english'],
+            'hiragana': args['hiragana'],
+            'romaji': args['romaji'],
+            'explanation': args['explanation'],
           });
-          result = 'Reminder "${args['title']}" created successfully';
+          result = 'Sentence review displayed successfully';
         }
         break;
 
-      case 'show_calendar_event':
+      case 'show_speaking_exercise':
         if (args != null) {
-          print('=== Creating calendar event: ${args['title']}');
+          print('=== Creating speaking exercise: ${args['targetPhrase']}');
           _toolCallController.add({
-            'function': 'show_calendar_event',
-            'title': args['title'],
-            'startTime': args['startTime'],
-            'endTime': args['endTime'],
-            'description': args['description'],
+            'function': 'show_speaking_exercise',
+            'prompt': args['prompt'],
+            'targetPhrase': args['targetPhrase'],
+            'hiragana': args['hiragana'],
+            'romaji': args['romaji'],
+            'hints': args['hints'],
           });
-          result = 'Calendar event "${args['title']}" created successfully';
+          result = 'Speaking exercise displayed successfully';
         }
         break;
 
-      case 'show_list':
+      case 'show_vocabulary_list':
         if (args != null) {
-          print('=== Creating list: ${args['title']}');
+          print('=== Creating vocabulary list: ${args['title']}');
           _toolCallController.add({
-            'function': 'show_list',
+            'function': 'show_vocabulary_list',
             'title': args['title'],
-            'items': args['items'],
+            'words': args['words'],
           });
-          result = 'List "${args['title']}" displayed successfully';
+          result = 'Vocabulary list "${args['title']}" displayed successfully';
         }
         break;
 
-      case 'show_card':
+      case 'show_grammar_explanation':
         if (args != null) {
-          print('=== Creating card: ${args['title']}');
+          print('=== Creating grammar explanation: ${args['title']}');
           _toolCallController.add({
-            'function': 'show_card',
+            'function': 'show_grammar_explanation',
             'title': args['title'],
-            'subtitle': args['subtitle'],
-            'content': args['content'],
+            'explanation': args['explanation'],
+            'examples': args['examples'],
           });
-          result = 'Card "${args['title']}" displayed successfully';
+          result = 'Grammar explanation "${args['title']}" displayed successfully';
         }
         break;
 
-      case 'create_task_list':
+      case 'show_kanji_practice':
         if (args != null) {
-          final componentId = 'component_${_componentIdCounter++}';
-          print('=== Creating task list: ${args['title']} with ID: $componentId');
+          print('=== Creating kanji practice: ${args['kanji']}');
           _toolCallController.add({
-            'function': 'create_task_list',
-            'id': componentId,
-            'title': args['title'],
-            'tasks': args['tasks'],
+            'function': 'show_kanji_practice',
+            'kanji': args['kanji'],
+            'meaning': args['meaning'],
+            'readings': args['readings'],
+            'examples': args['examples'],
           });
-          result = 'Task list "${args['title']}" created with ID "$componentId". It has ${(args['tasks'] as List).length} tasks. Remember this ID to complete tasks later.';
+          result = 'Kanji practice for "${args['kanji']}" displayed successfully';
         }
         break;
 
-      case 'complete_task':
+      case 'show_listening_exercise':
         if (args != null) {
-          print('=== Completing task: List ${args['task_list_id']}, Task #${args['task_number']}');
+          print('=== Creating listening exercise: ${args['targetSentence']}');
           _toolCallController.add({
-            'function': 'complete_task',
-            'task_list_id': args['task_list_id'],
-            'task_number': args['task_number'],
+            'function': 'show_listening_exercise',
+            'instruction': args['instruction'],
+            'targetSentence': args['targetSentence'],
+            'hiragana': args['hiragana'],
+            'romaji': args['romaji'],
           });
-          result = 'Task #${args['task_number']} marked as complete';
+          result = 'Listening exercise displayed successfully';
+        }
+        break;
+
+      case 'update_card_rating':
+        if (args != null) {
+          final word = args['word'];
+          final rating = args['rating'];
+          final reason = args['reason'] ?? 'No reason provided';
+          print('=== Updating card rating: $word -> $rating ($reason)');
+          _toolCallController.add({
+            'function': 'update_card_rating',
+            'word': word,
+            'rating': rating,
+            'reason': reason,
+          });
+          result = 'Card rating updated successfully for "$word"';
         }
         break;
 
@@ -636,7 +812,9 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
     try {
       await _channel?.sink.close();
       _isConnected = false;
-      _connectionStateController.add(false);
+      if (!_isDisposed && !_connectionStateController.isClosed) {
+        _connectionStateController.add(false);
+      }
       print('Disconnected from Gemini Live API');
     } catch (e) {
       print('Error disconnecting: $e');
@@ -645,6 +823,7 @@ When users ask to see notes, reminders, calendar events, or lists, use the appro
 
   /// Dispose of all resources
   void dispose() {
+    _isDisposed = true;
     disconnect();
     _audioOutputController.close();
     _textOutputController.close();

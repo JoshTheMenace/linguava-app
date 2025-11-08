@@ -1,5 +1,5 @@
-name: jarvis
-description: "A new Flutter project."
+name: linguava
+description: "A Japanese language learning app with AI conversation practice."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # Core dependencies for Jarvis
+  # Core dependencies for Linguava
   web_socket_channel: ^2.4.0
   just_audio: ^0.9.36
   permission_handler: ^11.0.1
@@ -43,9 +43,9 @@ dependencies:
   record: ^6.1.2
   http: ^1.1.0
   flutter_dotenv: ^5.1.0
-  camera: ^0.10.5+5
-  porcupine_flutter: ^3.0.2
-  image: ^4.0.17
+  fsrs: ^2.0.0
+  intl: ^0.19.0
+  sqflite: ^2.3.0
 
 dev_dependencies:
   flutter_test:

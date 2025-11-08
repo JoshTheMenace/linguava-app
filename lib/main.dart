@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'hud_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,16 +20,15 @@ void main() async {
 }
 
 Future<void> _requestPermissions() async {
-  // Request camera and microphone permissions
-  final cameraStatus = await Permission.camera.request();
+  // Request microphone permission for voice interaction
   final microphoneStatus = await Permission.microphone.request();
 
-  if (cameraStatus.isDenied || microphoneStatus.isDenied) {
-    print('Permissions denied. The app may not function correctly.');
+  if (microphoneStatus.isDenied) {
+    print('Microphone permission denied. Voice interaction will not work.');
   }
 
-  if (cameraStatus.isPermanentlyDenied || microphoneStatus.isPermanentlyDenied) {
-    print('Permissions permanently denied. Please enable them in settings.');
+  if (microphoneStatus.isPermanentlyDenied) {
+    print('Microphone permission permanently denied. Please enable it in settings.');
   }
 }
 
@@ -39,22 +38,21 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JARVIS',
+      title: 'Linguava',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
-        primaryColor: Colors.cyanAccent,
+        primaryColor: Colors.purpleAccent,
         colorScheme: ColorScheme.dark(
-          primary: Colors.cyanAccent,
-          secondary: Colors.blueAccent,
+          primary: Colors.purpleAccent,
+          secondary: Colors.deepPurpleAccent,
           surface: Colors.black,
         ),
         useMaterial3: true,
       ),
-      home: JarvisHUDScreen(
+      home: HomeScreen(
         apiKey: dotenv.env['GEMINI_API_KEY'] ?? '',
-        picovoiceKey: dotenv.env['PICOVOICE_ACCESS_KEY'] ?? '',
       ),
     );
   }

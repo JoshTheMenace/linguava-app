@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'task_item.dart';
 
-/// Represents a dynamic UI component that can be displayed
+/// Represents a dynamic UI component for Japanese learning
 class UIComponent {
   final String id;
   final UIComponentType type;
@@ -15,181 +14,212 @@ class UIComponent {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  /// Create a note component
-  factory UIComponent.note({
+  /// Create a flashcard component
+  factory UIComponent.flashcard({
     required String id,
-    required String title,
-    required String content,
+    required String front,
+    required String back,
+    String? hiragana,
+    String? romaji,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.note,
+      type: UIComponentType.flashcard,
       data: {
-        'title': title,
-        'content': content,
+        'front': front,
+        'back': back,
+        'hiragana': hiragana,
+        'romaji': romaji,
       },
     );
   }
 
-  /// Create a reminder component
-  factory UIComponent.reminder({
+  /// Create a sentence review component
+  factory UIComponent.sentenceReview({
     required String id,
-    required String title,
-    required DateTime time,
-    String? description,
+    required String japanese,
+    required String english,
+    String? hiragana,
+    String? romaji,
+    String? explanation,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.reminder,
+      type: UIComponentType.sentenceReview,
       data: {
-        'title': title,
-        'time': time.toIso8601String(),
-        'description': description,
+        'japanese': japanese,
+        'english': english,
+        'hiragana': hiragana,
+        'romaji': romaji,
+        'explanation': explanation,
       },
     );
   }
 
-  /// Create a calendar event component
-  factory UIComponent.calendarEvent({
+  /// Create a speaking exercise component
+  factory UIComponent.speakingExercise({
     required String id,
-    required String title,
-    required DateTime startTime,
-    DateTime? endTime,
-    String? description,
+    required String prompt,
+    required String targetPhrase,
+    String? hiragana,
+    String? romaji,
+    String? hints,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.calendarEvent,
+      type: UIComponentType.speakingExercise,
       data: {
-        'title': title,
-        'startTime': startTime.toIso8601String(),
-        'endTime': endTime?.toIso8601String(),
-        'description': description,
+        'prompt': prompt,
+        'targetPhrase': targetPhrase,
+        'hiragana': hiragana,
+        'romaji': romaji,
+        'hints': hints,
       },
     );
   }
 
-  /// Create a list component
-  factory UIComponent.list({
+  /// Create a vocabulary list component
+  factory UIComponent.vocabularyList({
     required String id,
     required String title,
-    required List<String> items,
+    required List<Map<String, String>> words,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.list,
+      type: UIComponentType.vocabularyList,
       data: {
         'title': title,
-        'items': items,
+        'words': words,
       },
     );
   }
 
-  /// Create a custom card component
-  factory UIComponent.card({
+  /// Create a grammar explanation component
+  factory UIComponent.grammarExplanation({
     required String id,
     required String title,
-    String? subtitle,
-    String? content,
-    IconData? icon,
+    required String explanation,
+    List<String>? examples,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.card,
+      type: UIComponentType.grammarExplanation,
       data: {
         'title': title,
-        'subtitle': subtitle,
-        'content': content,
-        'icon': icon?.codePoint,
+        'explanation': explanation,
+        'examples': examples ?? [],
       },
     );
   }
 
-  /// Create a task list component
-  factory UIComponent.taskList({
+  /// Create a kanji practice component
+  factory UIComponent.kanjiPractice({
     required String id,
-    required String title,
-    required List<TaskItem> tasks,
+    required String kanji,
+    required String meaning,
+    required List<String> readings,
+    List<String>? examples,
   }) {
     return UIComponent(
       id: id,
-      type: UIComponentType.taskList,
+      type: UIComponentType.kanjiPractice,
       data: {
-        'title': title,
-        'tasks': tasks.map((t) => t.toMap()).toList(),
+        'kanji': kanji,
+        'meaning': meaning,
+        'readings': readings,
+        'examples': examples ?? [],
       },
     );
   }
 
-  /// Get tasks from component data
-  List<TaskItem> get tasks {
-    if (type != UIComponentType.taskList) return [];
-    final taskMaps = data['tasks'] as List<dynamic>? ?? [];
-    return taskMaps.map((map) => TaskItem.fromMap(map as Map<String, dynamic>)).toList();
-  }
-
-  /// Update a task's completion status
-  UIComponent updateTaskStatus(String taskId, bool isCompleted) {
-    if (type != UIComponentType.taskList) return this;
-
-    final updatedTasks = tasks.map((task) {
-      if (task.id == taskId) {
-        return task.copyWith(isCompleted: isCompleted);
-      }
-      return task;
-    }).toList();
-
-    return UIComponent.taskList(
+  /// Create a listening comprehension component
+  factory UIComponent.listeningComprehension({
+    required String id,
+    required String instruction,
+    required String targetSentence,
+    String? hiragana,
+    String? romaji,
+  }) {
+    return UIComponent(
       id: id,
-      title: data['title'] as String,
-      tasks: updatedTasks,
+      type: UIComponentType.listeningComprehension,
+      data: {
+        'instruction': instruction,
+        'targetSentence': targetSentence,
+        'hiragana': hiragana,
+        'romaji': romaji,
+      },
     );
   }
 }
 
-/// Types of UI components that can be displayed
+/// Types of UI components for Japanese learning
 enum UIComponentType {
-  note,
-  reminder,
-  calendarEvent,
-  list,
-  card,
-  taskList,
+  flashcard,
+  sentenceReview,
+  speakingExercise,
+  vocabularyList,
+  grammarExplanation,
+  kanjiPractice,
+  listeningComprehension,
 }
 
 /// Extension to get display name for component types
 extension UIComponentTypeExtension on UIComponentType {
   String get displayName {
     switch (this) {
-      case UIComponentType.note:
-        return 'Note';
-      case UIComponentType.reminder:
-        return 'Reminder';
-      case UIComponentType.calendarEvent:
-        return 'Calendar Event';
-      case UIComponentType.list:
-        return 'List';
-      case UIComponentType.card:
-        return 'Card';
-      case UIComponentType.taskList:
-        return 'Task List';
+      case UIComponentType.flashcard:
+        return 'Flashcard';
+      case UIComponentType.sentenceReview:
+        return 'Sentence Review';
+      case UIComponentType.speakingExercise:
+        return 'Speaking Exercise';
+      case UIComponentType.vocabularyList:
+        return 'Vocabulary';
+      case UIComponentType.grammarExplanation:
+        return 'Grammar';
+      case UIComponentType.kanjiPractice:
+        return 'Kanji Practice';
+      case UIComponentType.listeningComprehension:
+        return 'Listening';
     }
   }
 
   IconData get icon {
     switch (this) {
-      case UIComponentType.note:
-        return Icons.note;
-      case UIComponentType.reminder:
-        return Icons.alarm;
-      case UIComponentType.calendarEvent:
-        return Icons.event;
-      case UIComponentType.list:
-        return Icons.list;
-      case UIComponentType.card:
-        return Icons.card_membership;
-      case UIComponentType.taskList:
-        return Icons.check_box;
+      case UIComponentType.flashcard:
+        return Icons.style;
+      case UIComponentType.sentenceReview:
+        return Icons.article;
+      case UIComponentType.speakingExercise:
+        return Icons.record_voice_over;
+      case UIComponentType.vocabularyList:
+        return Icons.list_alt;
+      case UIComponentType.grammarExplanation:
+        return Icons.book;
+      case UIComponentType.kanjiPractice:
+        return Icons.draw;
+      case UIComponentType.listeningComprehension:
+        return Icons.hearing;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case UIComponentType.flashcard:
+        return Colors.pinkAccent;
+      case UIComponentType.sentenceReview:
+        return Colors.blueAccent;
+      case UIComponentType.speakingExercise:
+        return Colors.orangeAccent;
+      case UIComponentType.vocabularyList:
+        return Colors.greenAccent;
+      case UIComponentType.grammarExplanation:
+        return Colors.purpleAccent;
+      case UIComponentType.kanjiPractice:
+        return Colors.redAccent;
+      case UIComponentType.listeningComprehension:
+        return Colors.tealAccent;
     }
   }
 }

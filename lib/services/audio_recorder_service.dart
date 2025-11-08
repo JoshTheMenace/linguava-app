@@ -10,6 +10,7 @@ class AudioRecorderService {
   final AudioRecorder _recorder = AudioRecorder();
   final GeminiLiveService _geminiService;
   StreamSubscription<Uint8List>? _audioStreamSubscription;
+  StreamSubscription<bool>? _connectionStateSubscription;
   bool _isRecording = false;
 
   /// Stream controller for audio levels (0.0 to 1.0)
@@ -22,7 +23,15 @@ class AudioRecorderService {
   /// Whether audio is currently being recorded
   bool get isRecording => _isRecording;
 
-  AudioRecorderService(this._geminiService);
+  AudioRecorderService(this._geminiService) {
+    // Listen to connection state changes
+    _connectionStateSubscription = _geminiService.connectionStateStream.listen((isConnected) {
+      if (!isConnected && _isRecording) {
+        print('Connection lost - stopping recording');
+        stopRecording();
+      }
+    });
+  }
 
   /// Start recording and streaming audio to Gemini
   Future<void> startRecording() async {
@@ -53,6 +62,12 @@ class AudioRecorderService {
       // Listen to audio chunks and send them to Gemini
       _audioStreamSubscription = stream.listen(
         (audioChunk) {
+          // Only send if still connected
+          if (!_geminiService.isConnected) {
+            print('Not connected - skipping audio chunk');
+            return;
+          }
+
           // Send audio chunk to Gemini
           final uint8List = Uint8List.fromList(audioChunk);
           _geminiService.sendAudio(uint8List);
@@ -137,6 +152,7 @@ class AudioRecorderService {
   /// Dispose of resources
   void dispose() {
     stopRecording();
+    _connectionStateSubscription?.cancel();
     _audioLevelController.close();
     _recorder.dispose();
   }

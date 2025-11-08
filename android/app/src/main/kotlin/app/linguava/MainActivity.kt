@@ -1,4 +1,4 @@
-package com.example.jarvis
+package app.linguava
 
 import io.flutter.embedding.android.FlutterActivity
 
